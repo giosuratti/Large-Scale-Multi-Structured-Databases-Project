@@ -1,4 +1,4 @@
-package it.unipi.findyourdoc.mongo;
+package it.unipi.findyourdoc.model.mongo;
 
 
 import lombok.AllArgsConstructor;
@@ -19,6 +19,6 @@ public class Patient extends User{
 
     private String location;
 
-    private ArrayList<>
+    // private ArrayList<>
 
 }

@@ -1,4 +1,4 @@
-package it.unipi.findyourdoc.mongo;
+package it.unipi.findyourdoc.model.mongo;
 
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
