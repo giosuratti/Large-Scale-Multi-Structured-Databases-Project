@@ -1,5 +1,18 @@
 package it.unipi.findyourdoc.model.mongo;
 
-public class AppointmentBrief {
-    protected int id;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.Id;
+
+import java.time.LocalDateTime;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public abstract class AppointmentBrief {
+    @Id protected int appointmentId;
+    protected LocalDateTime date;
+    protected Location location;
+    protected AppointmentStatus status;
 }
