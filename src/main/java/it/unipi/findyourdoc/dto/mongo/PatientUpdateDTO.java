@@ -10,7 +10,7 @@ import lombok.AllArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Schema(description = "DTO for updating an existing patient's profile")
-public class PatientUpdateDTO {
+public class PatientUpdateDTO extends UserDTO {
 
     @Schema(description = "The updated first name.", example = "Mario")
     private String firstName;
@@ -25,6 +25,9 @@ public class PatientUpdateDTO {
 
     @Schema(description = "The updated gender.", example = "Non-binary")
     private String gender;
+
+    @Schema(description = "The updated password")
+    private String password;
 
     @Schema(description = "The updated geographic location")
     private LocationDTO location;
