@@ -3,6 +3,7 @@ package it.unipi.findyourdoc.dto.mongo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 
@@ -10,6 +11,7 @@ import lombok.AllArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Schema(description = "DTO for updating an existing patient's profile")
+@EqualsAndHashCode(callSuper=false)
 public class PatientUpdateDTO extends UserDTO {
 
     @Schema(description = "The updated first name.", example = "Mario")

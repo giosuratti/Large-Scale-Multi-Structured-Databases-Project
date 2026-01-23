@@ -78,7 +78,7 @@ public class DoctorController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, String>> getCurrentDoctorInfo(HttpServletRequest request) {
         String token = jwtTokenProvider.resolveToken(request);
-        String email = jwtTokenProvider.getUsernameFromToken(token); // Il subject del token è la mail
+        String email = jwtTokenProvider.getEmailFromToken(token); // Il subject del token è la mail
 
         Map<String, String> doctorInfo = new HashMap<>();
         doctorInfo.put("email", email);

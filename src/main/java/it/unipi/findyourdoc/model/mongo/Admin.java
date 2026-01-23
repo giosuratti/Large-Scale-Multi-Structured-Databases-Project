@@ -16,5 +16,5 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @AllArgsConstructor
 @Document(collection = "admins")
 public class Admin extends User {
-    @Id private int id;
+    @Id private String id;
 }

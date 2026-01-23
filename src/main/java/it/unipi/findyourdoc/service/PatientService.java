@@ -1,8 +1,9 @@
 package it.unipi.findyourdoc.service;
 
-import it.unipi.findyourdoc.dto.mongo.PatientCreateDTO;
-import it.unipi.findyourdoc.dto.mongo.PatientReadDTO;
-import it.unipi.findyourdoc.dto.mongo.PatientUpdateDTO;
+import it.unipi.findyourdoc.dto.mongo.*;
+import org.springframework.http.ResponseEntity;
+
+import java.util.List;
 
 /**
  * Service interface for managing Registered User entities.
@@ -34,12 +35,22 @@ public interface PatientService {
      */
     PatientReadDTO updatePatient(String id, PatientUpdateDTO updateDTO);
 
-    /**
-     * Retrieves a user by their unique ID.
-     *
-     * @param id The user's ID.
-     * @return The found user details.
-     */
     PatientReadDTO getUserByEmail(String email);
+
+    PatientReadDTO getUserById(String id);
+
+    AppointmentPatientDTO bookAppointmentByEmail(String id, AppointmentDTO appointmentDTO);
+
+    void cancelAppointment(String id);
+
+    List<AppointmentPatientDTO> getAppointmentsByEmail(String email);
+
+    List<SymptomReportBriefDTO> getSymptomReportsByEmail(String email);
+
+    SymptomReportBriefDTO createSymptomReportByEmail(String email, SymptomReportCreateDTO createDTO);
+
+    RatingDTO addRatingByEmail (String email, RatingDTO ratingDTO);
+
+    List<RatingDTO> getAllRatingsByEmail(String email);
 
 }

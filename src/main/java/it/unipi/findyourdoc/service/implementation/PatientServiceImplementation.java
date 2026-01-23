@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -86,6 +87,41 @@ public class PatientServiceImplementation implements PatientService {
         return mapToReadDTO(patient);
     }
 
+    @Override
+    public PatientReadDTO getUserById(String id) {
+        Patient patient = patientRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Patient not found with email: " + id));
+        return mapToReadDTO(patient);
+    }
+
+    public AppointmentPatientDTO bookAppointmentByEmail(String email, AppointmentDTO appointmentDTO){
+
+    }
+
+    public void cancelAppointment(String id){
+
+    }
+
+    public List<AppointmentPatientDTO> getAppointmentsByEmail(String email){
+
+    }
+
+    public List<SymptomReportBriefDTO> getSymptomReportsByEmail(String email){
+
+    }
+
+    public SymptomReportBriefDTO createSymptomReportByEmail(String email, SymptomReportCreateDTO createDTO){
+
+    }
+
+    public RatingDTO addRatingByEmail (String email, RatingDTO ratingDTO){
+        
+    }
+
+    public List<RatingDTO> getAllRatingsByEmail(String email){
+
+    }
+
     // --- Metodi di Mapping Helper ---
 
     private PatientReadDTO mapToReadDTO(Patient p) {
@@ -125,4 +161,6 @@ public class PatientServiceImplementation implements PatientService {
         loc.setZipCode(dto.getZipCode());
         return loc;
     }
+
+
 }

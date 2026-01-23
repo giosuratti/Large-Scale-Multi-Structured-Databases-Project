@@ -92,13 +92,13 @@ public class JwtTokenProvider {
     public UsernamePasswordAuthenticationToken getAuthentication(String token) {
         DecodedJWT decodedJWT = JWT.require(algorithm).build().verify(token);
 
-        String username = decodedJWT.getSubject();
+        String email = decodedJWT.getClaim("email").asString();
         String role = decodedJWT.getClaim("role").asString();
 
         SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + role);
 
         return new UsernamePasswordAuthenticationToken(
-                username, null, Collections.singletonList(authority));
+                email, null, Collections.singletonList(authority));
     }
 
     public String getPatientEmailFromToken(String token) {

@@ -12,7 +12,7 @@ import org.springframework.data.annotation.Id;
 @NoArgsConstructor
 @AllArgsConstructor
 public abstract class User {
-    @Id private int id;
+    @Id private String id;
     private String email;
 
     private String telephone;
