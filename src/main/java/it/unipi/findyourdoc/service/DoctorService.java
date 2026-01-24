@@ -1,8 +1,8 @@
 package it.unipi.findyourdoc.service;
 
-import it.unipi.findyourdoc.dto.mongo.DoctorCreateDTO;
-import it.unipi.findyourdoc.dto.mongo.DoctorReadDTO;
-import it.unipi.findyourdoc.dto.mongo.DoctorUpdateDTO;
+import it.unipi.findyourdoc.dto.mongo.*;
+
+import java.util.List;
 
 /**
  * Service interface for managing Medical Doctor entities.
@@ -42,4 +42,12 @@ public interface DoctorService {
      * @throws org.springframework.web.server.ResponseStatusException If the doctor is not found.
      */
     DoctorReadDTO getDoctorByEmail(String email);
+
+    List<AppointmentDTO> getAppointmentsByEmail(String email);
+
+    List<RatingDTO> getRatingsByDoctorEmail(String email);
+
+    void addAvailabilitySlots(String email, List<SlotDTO> slots);
+
+    void removeAvailabilitySlot(String email, SlotDTO slotDTO);
 }

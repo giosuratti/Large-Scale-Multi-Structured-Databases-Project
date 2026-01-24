@@ -34,4 +34,11 @@ public class DoctorUpdateDTO {
 
     @Schema(description = "Updated office location details")
     private LocationDTO location;
+
+    @Schema(
+            description = "List of individual scores provided by patients for this doctor. Each value is an integer between 1 and 5.",
+            example = "[5, 4, 5, 3, 4]",
+            type = "array"
+    )
+    private ArrayList<Integer> rating;
 }

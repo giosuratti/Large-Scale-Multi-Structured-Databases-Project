@@ -8,21 +8,19 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import it.unipi.findyourdoc.dto.mongo.*;
+import it.unipi.findyourdoc.dto.neo4j.SpecialistDTO;
 import it.unipi.findyourdoc.security.JwtTokenProvider;
 import it.unipi.findyourdoc.service.PatientService;
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * REST controller for managing Registered Users.
@@ -161,7 +159,7 @@ public class PatientController {
     }
 
     @Operation(summary = "Rate a doctor", description = "Adds a rating to a doctor. The system automatically retrieves doctor's names.")
-    @PostMapping("/ratings")
+    @PostMapping("/rating")
     @PreAuthorize("hasRole('PATIENT')")
     public ResponseEntity<RatingDTO> addRating(HttpServletRequest request, @RequestBody @Valid RatingDTO ratingDTO) {
         // Passiamo al service l'ID del dottore e il voto
@@ -176,6 +174,17 @@ public class PatientController {
         return ResponseEntity.ok(patientService.getAllRatingsByEmail(email));
     }
 
+    @Operation(
+            summary = "Find specialists by diagnosis and city",
+            description = "Maps a diagnosis to a specialty and searches for doctors in the specified city.")
+    @GetMapping("/search/specialists/{city}")
+    @PreAuthorize("hasRole('PATIENT')")
+    public ResponseEntity<List<SpecialistDTO>> findSpecialistsInCity(
+            @Parameter(description = "The city to search in") @PathVariable String city,
+            @Parameter(description = "The diagnosis (e.g. Flu, Arrhythmia)") @RequestParam String diagnosis) {
 
+        // Non abbiamo più bisogno dell'email dal token per la posizione!
+        return ResponseEntity.ok(patientService.findSpecialistsByDiagnosisAndCity(city, diagnosis));
+    }
 
 }

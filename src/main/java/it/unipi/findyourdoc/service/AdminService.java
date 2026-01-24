@@ -14,4 +14,6 @@ public interface AdminService {
     Page<AdminReadDTO> getAllAdmins(Pageable pageable);
     AdminReadDTO updateAdmin(String email, AdminUpdateDTO updateDTO);
     AdminReadDTO getAdminByEmail(String email);
+    void deleteUser(String id);
+    void changeUserPassword(String id, String password);
 }

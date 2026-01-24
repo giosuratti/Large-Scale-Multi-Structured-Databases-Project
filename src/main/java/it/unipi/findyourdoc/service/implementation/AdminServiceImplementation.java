@@ -6,9 +6,6 @@ import it.unipi.findyourdoc.dto.mongo.AdminUpdateDTO;
 import it.unipi.findyourdoc.model.mongo.Admin;
 import it.unipi.findyourdoc.repository.mongo.AdminRepository;
 import it.unipi.findyourdoc.service.AdminService;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -16,6 +13,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Implementation of the AdminService for FindYourDoc.
@@ -112,5 +113,14 @@ public class AdminServiceImplementation implements AdminService {
         dto.setTelephone(admin.getTelephone());
         dto.setCreatedAt(admin.getCreatedAt());
         return dto;
+    }
+
+
+    public void deleteUser(String id) {
+
+    }
+
+    public void changeUserPassword(String id, String password){
+
     }
 }

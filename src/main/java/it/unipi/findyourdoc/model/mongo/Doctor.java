@@ -20,6 +20,7 @@ public class Doctor extends User {
     private ArrayList<String> specializations;
     private ArrayList<AppointmentDoctor> bookedToday;
     private ArrayList<Slot> availableSlots;
+    private ArrayList<Integer> rating;
 
     private Location location;
     private float avgRating;

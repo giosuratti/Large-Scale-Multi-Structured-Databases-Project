@@ -1,7 +1,7 @@
 package it.unipi.findyourdoc.service;
 
 import it.unipi.findyourdoc.dto.mongo.*;
-import org.springframework.http.ResponseEntity;
+import it.unipi.findyourdoc.dto.neo4j.SpecialistDTO;
 
 import java.util.List;
 
@@ -52,5 +52,7 @@ public interface PatientService {
     RatingDTO addRatingByEmail (String email, RatingDTO ratingDTO);
 
     List<RatingDTO> getAllRatingsByEmail(String email);
+
+    List<SpecialistDTO> findSpecialistsByDiagnosisAndCity(String city, String diagnosis);
 
 }

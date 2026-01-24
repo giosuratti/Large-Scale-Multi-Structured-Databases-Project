@@ -10,12 +10,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import it.unipi.findyourdoc.dto.mongo.AdminCreateDTO;
 import it.unipi.findyourdoc.dto.mongo.AdminReadDTO;
 import it.unipi.findyourdoc.dto.mongo.AdminUpdateDTO;
+import it.unipi.findyourdoc.dto.mongo.PasswordChangeDTO;
 import it.unipi.findyourdoc.security.JwtTokenProvider;
 import it.unipi.findyourdoc.service.AdminService;
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +22,8 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * REST Controller for managing Administrator resources in FindYourDoc.
@@ -50,20 +51,30 @@ public class AdminController {
         return ResponseEntity.ok(adminService.createAdmin(createDTO));
     }
 
-    @Operation(summary = "Update an Administrator by Email")
-    @PutMapping("/{email}")
+    @Operation(summary = "Update current Administrator profile",
+            description = "Updates the profile of the administrator currently authenticated via JWT.")
+    @PutMapping("/me")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AdminReadDTO> updateAdmin(
-            @Parameter(description = "The email of the admin to update") @PathVariable String email,
+            HttpServletRequest request,
             @RequestBody AdminUpdateDTO updateDTO) {
+
+        // Estraiamo l'identità dal token in modo sicuro
+        String token = jwtTokenProvider.resolveToken(request);
+        String email = jwtTokenProvider.getEmailFromToken(token);
+
         return ResponseEntity.ok(adminService.updateAdmin(email, updateDTO));
     }
 
-    @Operation(summary = "Get Admin by Email")
-    @GetMapping("/{email}")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<AdminReadDTO> getAdminByEmail(
-            @Parameter(description = "The email of the admin to retrieve") @PathVariable String email) {
+    @Operation(summary = "Get current Admin profile",
+            description = "Retrieves the profile data of the administrator currently authenticated.")
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('ADMIN')") // Solo un admin può vedere il proprio profilo admin
+    public ResponseEntity<AdminReadDTO> getAdminMe(HttpServletRequest request) {
+
+        String token = jwtTokenProvider.resolveToken(request);
+        String email = jwtTokenProvider.getEmailFromToken(token);
+
         return ResponseEntity.ok(adminService.getAdminByEmail(email));
     }
 
@@ -82,25 +93,27 @@ public class AdminController {
         return ResponseEntity.ok(adminService.searchAdmins(email));
     }
 
-    @Operation(summary = "Get Current Admin Info from Token")
-    @GetMapping("/me")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Map<String, String>> getCurrentUser(HttpServletRequest request) {
-        String token = jwtTokenProvider.resolveToken(request);
-        String email = jwtTokenProvider.getEmailFromToken(token); // In questo caso il "username" è la mail
 
-        Map<String, String> response = new HashMap<>();
-        response.put("email", email);
-
-        return ResponseEntity.ok(response);
-    }
-
-    @Operation(summary = "Delete an Administrator by Email")
-    @DeleteMapping("/{email}")
+    @Operation(summary = "Delete a user by Id")
+    @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteAdmin(
-            @Parameter(description = "The email of the admin to delete") @PathVariable String email) {
-        adminService.deleteAdmin(email);
+            @Parameter(description = "The email of the admin to delete") @PathVariable String id) {
+        adminService.deleteUser(id);
         return ResponseEntity.noContent().build();
     }
+
+    @Operation(summary = "Force password change for any user",
+            description = "Allows an Admin to change the password of any Admin, Doctor, or Patient using their unique ID.")
+    @PatchMapping("/accounts/{id}/password")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<String> forcePasswordChange(
+            @Parameter(description = "The unique ID of the account") @PathVariable String id,
+            @RequestBody @Valid PasswordChangeDTO passwordDTO) {
+
+        adminService.changeUserPassword(id, passwordDTO.getNewPassword());
+        return ResponseEntity.ok("Password successfully updated for user ID: " + id);
+    }
+
+
 }

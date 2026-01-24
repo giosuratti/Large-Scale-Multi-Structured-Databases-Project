@@ -1,6 +1,7 @@
 package it.unipi.findyourdoc.service.implementation;
 
 import it.unipi.findyourdoc.dto.mongo.*;
+import it.unipi.findyourdoc.dto.neo4j.SpecialistDTO;
 import it.unipi.findyourdoc.model.mongo.Location;
 import it.unipi.findyourdoc.model.mongo.Patient;
 import it.unipi.findyourdoc.repository.mongo.PatientRepository;
@@ -162,5 +163,8 @@ public class PatientServiceImplementation implements PatientService {
         return loc;
     }
 
+    public List<SpecialistDTO> findSpecialistsByDiagnosisAndCity(String city, String diagnosis) {
+        
+    }
 
 }

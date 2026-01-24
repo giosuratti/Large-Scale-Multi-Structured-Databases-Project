@@ -15,4 +15,5 @@ public interface AdminRepository extends MongoRepository<Admin, String> {
     List<Admin> findByEmailStartingWith(String prefix);
 
     void deleteByEmail(String email);
+
 }

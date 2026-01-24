@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -119,5 +120,21 @@ public class DoctorServiceImplementation implements DoctorService {
         loc.setState(dto.getState());
         loc.setZipCode(dto.getZipCode());
         return loc;
+    }
+
+    public List<AppointmentDTO> getAppointmentsByEmail(String email){
+
+    }
+
+    public List<RatingDTO> getRatingsByDoctorEmail(String email){
+
+    }
+
+    public void addAvailabilitySlots(String email, List<SlotDTO> slots) {
+
+    }
+
+    public void removeAvailabilitySlot(String email, SlotDTO slotDTO) {
+
     }
 }
