@@ -50,4 +50,6 @@ public interface DoctorService {
     void addAvailabilitySlots(String email, List<SlotDTO> slots);
 
     void removeAvailabilitySlot(String email, SlotDTO slotDTO);
+
+    void invalidateDoctorCache(String id);
 }

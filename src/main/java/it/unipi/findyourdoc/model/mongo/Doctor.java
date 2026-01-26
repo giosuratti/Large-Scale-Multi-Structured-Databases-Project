@@ -17,7 +17,7 @@ public class Doctor extends User {
     private String firstName;
     private String lastName;
 
-    private ArrayList<String> specializations;
+    private ArrayList<String> specialties;
     private ArrayList<AppointmentDoctor> bookedToday;
     private ArrayList<Slot> availableSlots;
     private ArrayList<Integer> rating;

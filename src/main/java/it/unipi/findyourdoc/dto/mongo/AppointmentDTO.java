@@ -21,8 +21,12 @@ public class AppointmentDTO {
     @Schema(description = "The unique ID of the appointment", example = "1024")
     private String id;
 
+    // --- Informazioni sul Medico ---
+    @Schema(description = "ID del medico (utile per link al profilo)", example = "501")
+    private String doctorId;
+
     @Schema(description = "Date and time of the appointment", example = "2026-05-15T10:30:00")
-    private LocalDateTime appointmentDateTime;
+    private LocalDateTime DateTime;
 
     @Schema(description = "Current status of the appointment", example = "CONFIRMED")
     private AppointmentStatus status;
@@ -52,4 +56,5 @@ public class AppointmentDTO {
 
     @Schema(description = "Location of the medical office")
     private LocationDTO location;
+
 }

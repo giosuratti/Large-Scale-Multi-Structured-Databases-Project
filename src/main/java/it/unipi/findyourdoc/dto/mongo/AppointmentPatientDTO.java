@@ -1,6 +1,7 @@
 package it.unipi.findyourdoc.dto.mongo;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import it.unipi.findyourdoc.model.mongo.AppointmentStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -22,10 +23,10 @@ public class AppointmentPatientDTO {
     private String id;
 
     @Schema(description = "Data e ora dell'appuntamento", example = "2026-05-15T10:30:00")
-    private LocalDateTime appointmentDateTime;
+    private LocalDateTime dateTime;
 
     @Schema(description = "Stato dell'appuntamento (es. PENDING, CONFIRMED, CANCELLED)", example = "CONFIRMED")
-    private String status;
+    private AppointmentStatus status;
 
     // --- Informazioni sul Medico ---
     @Schema(description = "ID del medico (utile per link al profilo)", example = "501")

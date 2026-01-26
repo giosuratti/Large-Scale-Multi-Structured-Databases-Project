@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.ArrayList;
 
 @Data
 @Schema(description = "DTO per creare un nuovo report dei sintomi")
@@ -13,7 +13,7 @@ public class SymptomReportCreateDTO {
     private String context;
 
     @Schema(description = "Lista dei sintomi avvertiti", example = "['Nausea', 'Mal di stomaco']")
-    private List<String> symptoms;
+    private ArrayList<String> symptoms;
 
     @Schema(description = "The date and time when the report was generated", example = "2026-01-22T17:00:00")
     private LocalDateTime createdAt;
