@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public abstract class AppointmentBrief {
     @Id protected int appointmentId;
-    protected LocalDateTime date;
+    protected LocalDateTime dateTime;
     protected Location location;
     protected AppointmentStatus status;
 }

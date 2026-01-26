@@ -1,11 +1,15 @@
 package it.unipi.findyourdoc.service.implementation;
 
+import com.sun.tools.javac.Main;
 import it.unipi.findyourdoc.dto.mongo.*;
 import it.unipi.findyourdoc.model.mongo.Doctor;
 import it.unipi.findyourdoc.model.mongo.Location;
 import it.unipi.findyourdoc.repository.mongo.DoctorRepository;
 import it.unipi.findyourdoc.service.DoctorService;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,6 +24,7 @@ public class DoctorServiceImplementation implements DoctorService {
 
     private final DoctorRepository doctorRepository;
     private final PasswordEncoder passwordEncoder;
+    private static final Logger log = LoggerFactory.getLogger(DoctorServiceImplementation.class);
 
     @Override
     public DoctorReadDTO registerDoctor(DoctorCreateDTO createDTO) {
@@ -136,5 +141,16 @@ public class DoctorServiceImplementation implements DoctorService {
 
     public void removeAvailabilitySlot(String email, SlotDTO slotDTO) {
 
+    }
+    @Override
+    // NOTA BENE:
+    // value = "doctor_appointments" deve coincidere con quello usato in getAppointmentsByEmail
+    // key = "#email" indica che l'email passata come argomento è la chiave da cancellare
+    @CacheEvict(value = "doctor_appointments", key = "#id")
+    public void invalidateDoctorCache(String id) {
+        // Il corpo del metodo può essere vuoto!
+        // L'annotazione fa tutto il lavoro sporco su Redis prima (o dopo) l'esecuzione.
+        // Mettiamo un log solo per debug.
+        log.info("Cache invalidata per il dottore: {}. Al prossimo accesso i dati verranno ricaricati da MongoDB.", email);
     }
 }

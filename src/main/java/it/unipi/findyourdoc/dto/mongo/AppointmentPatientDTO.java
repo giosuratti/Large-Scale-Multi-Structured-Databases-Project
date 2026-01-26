@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.ArrayList;
 
 /**
  * DTO per la visualizzazione dell'appuntamento dal punto di vista del Paziente.
@@ -38,7 +38,7 @@ public class AppointmentPatientDTO {
     private String doctorLastName;
 
     @Schema(description = "Specializzazioni del medico", example = "['Cardiologia']")
-    private List<String> doctorSpecialties;
+    private ArrayList<String> doctorSpecialties;
 
     // --- Luogo della visita ---
     @Schema(description = "Indirizzo dello studio medico")
