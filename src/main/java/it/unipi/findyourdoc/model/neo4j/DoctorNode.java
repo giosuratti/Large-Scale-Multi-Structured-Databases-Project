@@ -18,6 +18,8 @@ public class DoctorNode {
     private String city;
     private String phone;
 
+    private Double rating;
+
     // Mappiamo la relazione inversa per comodità.
     // Su Neo4j: (Spec)-[:HAS_DOCTOR]->(Doc)
     // Qui diciamo: Il dottore "ha" una specializzazione che gli "entra" (INCOMING).
