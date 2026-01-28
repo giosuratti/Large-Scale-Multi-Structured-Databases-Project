@@ -4,18 +4,28 @@ import it.unipi.findyourdoc.dto.mongo.AdminCreateDTO;
 import it.unipi.findyourdoc.dto.mongo.AdminReadDTO;
 import it.unipi.findyourdoc.dto.mongo.AdminUpdateDTO;
 import it.unipi.findyourdoc.model.mongo.Admin;
+import it.unipi.findyourdoc.model.mongo.Doctor;
+import it.unipi.findyourdoc.model.mongo.Patient;
 import it.unipi.findyourdoc.repository.mongo.AdminRepository;
+import it.unipi.findyourdoc.repository.mongo.DoctorRepository;
+import it.unipi.findyourdoc.repository.mongo.PatientRepository;
 import it.unipi.findyourdoc.service.AdminService;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -28,6 +38,12 @@ public class AdminServiceImplementation implements AdminService {
 
     private final AdminRepository adminRepository;
     private final PasswordEncoder passwordEncoder;
+    private final DoctorRepository doctorRepository;
+    private final PatientRepository patientRepository;
+    private static final Logger log = LoggerFactory.getLogger(DoctorServiceImplementation.class);
+
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
 
     @Override
     public AdminReadDTO createAdmin(AdminCreateDTO dto) {
@@ -116,11 +132,104 @@ public class AdminServiceImplementation implements AdminService {
     }
 
 
+    @Override
     public void deleteUser(String id) {
+        boolean deleted = false;
 
+        // 1. Attempt to find and delete if the ID belongs to a DOCTOR
+        if (doctorRepository.existsById(id)) {
+            doctorRepository.deleteById(id);
+            deleted = true;
+            // Note: ideally, you should also implement a cascade delete here
+            // to remove appointments associated with this doctor.
+        }
+
+        // 2. If not found yet, check if the ID belongs to a PATIENT
+        if (!deleted && patientRepository.existsById(id)) {
+            patientRepository.deleteById(id);
+            deleted = true;
+        }
+
+        // 3. If not found yet, check if the ID belongs to an ADMIN
+        if (!deleted && adminRepository.existsById(id)) {
+            adminRepository.deleteById(id);
+            deleted = true;
+        }
+
+        // 4. If the ID was not found in any of the three collections
+        if (!deleted) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User with ID " + id + " not found in any repository (Doctor, Patient, or Admin).");
+        }
+
+        // Log the action for security auditing
+        // log.info("Admin deleted user with ID: {}", id);
     }
 
-    public void changeUserPassword(String id, String password){
 
+    // Fondamentale per pulire Redis manualmente
+
+    @Override
+    @Transactional
+    public void changeUserPassword(String id, String newPassword) {
+        // 1. Criptiamo SEMPRE la password prima di toccare qualsiasi cosa
+        String encodedPassword = passwordEncoder.encode(newPassword);
+        boolean userFound = false;
+
+        // --- TENTATIVO 1: È UN DOTTORE? ---
+        Optional<Doctor> doctorOpt = doctorRepository.findById(id);
+        if (doctorOpt.isPresent()) {
+            Doctor doctor = doctorOpt.get();
+            doctor.setPassword(encodedPassword);
+            doctorRepository.save(doctor);
+
+            // REDIS: Se cambiamo la password, per sicurezza cancelliamo la sua cache appuntamenti.
+            // Nota: La chiave deve corrispondere a quella usata in @Cacheable (es. "doctor_appointments::email")
+            String cacheKey = "doctor_appointments::" + doctor.getEmail();
+            redisTemplate.delete(cacheKey);
+
+            log.info("Password aggiornata e cache invalidata per il dottore: {}", doctor.getEmail());
+            userFound = true;
+        }
+
+        // --- TENTATIVO 2: È UN PAZIENTE? ---
+        if (!userFound) {
+            Optional<Patient> patientOpt = patientRepository.findById(id);
+            if (patientOpt.isPresent()) {
+                Patient patient = patientOpt.get();
+                patient.setPassword(encodedPassword);
+                patientRepository.save(patient);
+
+                // REDIS: Cancelliamo la cache dei report o della storia clinica
+                String cacheKey = "patient_reports::" + patient.getEmail();
+                redisTemplate.delete(cacheKey);
+
+                log.info("Password aggiornata e cache invalidata per il paziente: {}", patient.getEmail());
+                userFound = true;
+            }
+        }
+
+        // --- TENTATIVO 3: È UN ADMIN? ---
+        if (!userFound) {
+            Optional<Admin> adminOpt = adminRepository.findById(id);
+            if (adminOpt.isPresent()) {
+                Admin admin = adminOpt.get();
+                admin.setPassword(encodedPassword);
+                adminRepository.save(admin);
+
+                // Gli admin solitamente non hanno cache pesanti, ma se ne avessero, vanno pulite qui.
+                log.info("Password aggiornata per l'admin ID: {}", id);
+                userFound = true;
+            }
+        }
+
+        // Se non abbiamo trovato nessuno con quell'ID
+        if (!userFound) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Nessun utente trovato con ID: " + id);
+        }
+
+        // OPZIONALE MA CONSIGLIATO CON REDIS (Blacklist Token):
+        // Se gestissi una Blacklist dei token JWT su Redis, qui dovresti aggiungere
+        // una logica per invalidare tutti i token attivi di questo utente.
+        // Es: tokenBlacklistService.invalidateAllTokensForUser(id);
     }
 }

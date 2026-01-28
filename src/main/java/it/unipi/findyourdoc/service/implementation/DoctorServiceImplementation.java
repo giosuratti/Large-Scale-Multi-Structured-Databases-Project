@@ -1,22 +1,28 @@
 package it.unipi.findyourdoc.service.implementation;
 
-import com.sun.tools.javac.Main;
 import it.unipi.findyourdoc.dto.mongo.*;
-import it.unipi.findyourdoc.model.mongo.Doctor;
-import it.unipi.findyourdoc.model.mongo.Location;
+import it.unipi.findyourdoc.model.mongo.*;
+import it.unipi.findyourdoc.repository.mongo.AppointmentRepository;
 import it.unipi.findyourdoc.repository.mongo.DoctorRepository;
 import it.unipi.findyourdoc.service.DoctorService;
+import it.unipi.findyourdoc.utils.Mapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
+
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +30,7 @@ public class DoctorServiceImplementation implements DoctorService {
 
     private final DoctorRepository doctorRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AppointmentRepository appointmentRepository;
     private static final Logger log = LoggerFactory.getLogger(DoctorServiceImplementation.class);
 
     @Override
@@ -43,16 +50,16 @@ public class DoctorServiceImplementation implements DoctorService {
         // Campi specifici Doctor
         doctor.setFirstName(createDTO.getFirstName());
         doctor.setLastName(createDTO.getLastName());
-        doctor.setSpecializations(createDTO.getSpecializations());
+        doctor.setSpecialties(createDTO.getSpecializations());
         doctor.setGender(createDTO.getGender());
 
         // Mapping Location
         if (createDTO.getLocation() != null) {
-            doctor.setLocation(mapLocationDtoToEntity(createDTO.getLocation()));
+            doctor.setLocation(Mapper.mapLocationDtoToEntity(createDTO.getLocation()));
         }
 
         Doctor savedDoctor = doctorRepository.save(doctor);
-        return mapToReadDTO(savedDoctor);
+        return Mapper.mapToReadDTO(savedDoctor);
     }
 
     @Override
@@ -76,71 +83,165 @@ public class DoctorServiceImplementation implements DoctorService {
 
         if (updateDTO.getFirstName() != null) doctor.setFirstName(updateDTO.getFirstName());
         if (updateDTO.getLastName() != null) doctor.setLastName(updateDTO.getLastName());
-        if (updateDTO.getSpecializations() != null) doctor.setSpecializations(updateDTO.getSpecializations());
+        if (updateDTO.getSpecializations() != null) doctor.setSpecialties(updateDTO.getSpecializations());
         if (updateDTO.getGender() != null) doctor.setGender(updateDTO.getGender());
 
         if (updateDTO.getLocation() != null) {
-            doctor.setLocation(mapLocationDtoToEntity(updateDTO.getLocation()));
+            doctor.setLocation(Mapper.mapLocationDtoToEntity(updateDTO.getLocation()));
         }
 
-        return mapToReadDTO(doctorRepository.save(doctor));
+        return Mapper.mapToReadDTO(doctorRepository.save(doctor));
     }
 
     @Override
     public DoctorReadDTO getDoctorByEmail(String email) {
         Doctor doctor = doctorRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Doctor not found"));
-        return mapToReadDTO(doctor);
+        return Mapper.mapToReadDTO(doctor);
     }
 
-    // --- Metodi di Mapping ---
 
-    private DoctorReadDTO mapToReadDTO(Doctor d) {
-        DoctorReadDTO dto = new DoctorReadDTO();
-        dto.setId(String.valueOf(d.getId()));
-        dto.setEmail(d.getEmail());
-        dto.setTelephone(d.getTelephone());
-        dto.setCreatedAt(d.getCreatedAt());
 
-        dto.setFirstName(d.getFirstName());
-        dto.setLastName(d.getLastName());
-        dto.setSpecializations(d.getSpecializations());
-        dto.setGender(d.getGender());
 
-        if (d.getLocation() != null) {
-            dto.setLocation(new LocationDTO(
-                    d.getLocation().getAddress(),
-                    d.getLocation().getCity(),
-                    d.getLocation().getState(),
-                    d.getLocation().getZipCode()
-            ));
+    @Override
+    // REDIS: Qui attiviamo la cache.
+    // 1. Spring controlla se in Redis esiste la chiave "doctor_appointments::<email>"
+    // 2. SE ESISTE: Restituisce subito la lista (senza eseguire il codice sotto).
+    // 3. SE NON ESISTE: Esegue la query su Mongo, salva il risultato in Redis e lo restituisce.
+    @Cacheable(value = "doctor_appointments", key = "#email")
+    public List<AppointmentDTO> getAppointmentsByEmail(String email) {
+
+        // Questo log apparirà in console SOLO se i dati vengono letti dal Database (Cache Miss).
+        // Se non lo vedi, significa che Redis ha risposto (Cache Hit).
+        log.info("Cache Miss: Recupero appuntamenti dal Database per il dottore {}", email);
+
+        // 1. Query su MongoDB
+        // Assumiamo che tu abbia un metodo nel repository per cercare per email del dottore
+        List<AppointmentFull> appointments = appointmentRepository.findByDoctorEmail(email);
+
+        // 2. Mapping Entity -> DTO
+        // Usiamo il mapper centralizzato per trasformare la lista
+        return appointments.stream()
+                .map(Mapper::toAppointmentDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    // ⚡ REDIS: Cache fondamentale qui. Un dottore famoso potrebbe avere migliaia di letture al profilo.
+    @Cacheable(value = "doctor_ratings", key = "#email")
+    public DoctorRatingDTO getRatingsByDoctorEmail(String email) {
+
+        // 1. Recuperiamo il dottore dal DB
+        Doctor doctor = doctorRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Dottore non trovato con email: " + email));
+
+
+        // 3. Mapping dei risultati
+        return Mapper.mapToDoctorRatingDTO(doctor.getRating());
+    }
+
+
+    @Override
+    @Transactional // Ensures the update is atomic
+    public void addAvailabilitySlots(String email, List<SlotDTO> slotDTOs) {
+
+        // 1. Retrieve the Doctor from the database
+        Doctor doctor = doctorRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Doctor not found"));
+
+        // 2. Initialize the slots list if it doesn't exist to avoid NullPointerException
+        if (doctor.getAvailableSlots() == null) {
+            doctor.setAvailableSlots(new ArrayList<>());
         }
-        return dto;
+
+        List<Slot> newSlotsToAdd = new ArrayList<>();
+        LocalDateTime now = LocalDateTime.now();
+
+        // 3. Process incoming slots
+        for (SlotDTO dto : slotDTOs) {
+
+            // A. TIME VALIDATION: Ignore slots in the past
+            if (dto.getDateTime().isBefore(now)) {
+                continue; // Skip this slot
+            }
+
+            // B. DUPLICATE CHECK: Ensure no slot exists at the exact same time
+            boolean exists = doctor.getAvailableSlots().stream()
+                    .anyMatch(existingSlot -> existingSlot.getDateTime().isEqual(dto.getDateTime()));
+
+            if (exists) {
+                continue; // Skip duplicates to maintain data integrity
+            }
+
+            // C. MAPPING (DTO -> Entity)
+            Slot slot = new Slot();
+            slot.setDateTime(dto.getDateTime());
+
+            if (dto.getLocation() != null) {
+                Location location = new Location();
+                location.setCity(dto.getLocation().getCity());
+                location.setAddress(dto.getLocation().getAddress());
+                // Map latitude/longitude if available in DTO
+                slot.setLocation(location);
+            }
+
+            newSlotsToAdd.add(slot);
+        }
+
+        // 4. Save and Sort only if there are valid new slots
+        if (!newSlotsToAdd.isEmpty()) {
+            // Add the new valid slots to the doctor's schedule
+            doctor.getAvailableSlots().addAll(newSlotsToAdd);
+
+            // SORTING: Re-order the entire list chronologically (Oldest -> Newest)
+            // This ensures the frontend receives an ordered list without needing extra logic
+            doctor.getAvailableSlots().sort(Comparator.comparing(Slot::getDateTime));
+
+            // Persist changes to MongoDB
+            doctorRepository.save(doctor);
+        }
     }
 
-    private Location mapLocationDtoToEntity(LocationDTO dto) {
-        Location loc = new Location();
-        loc.setAddress(dto.getAddress());
-        loc.setCity(dto.getCity());
-        loc.setState(dto.getState());
-        loc.setZipCode(dto.getZipCode());
-        return loc;
-    }
-
-    public List<AppointmentDTO> getAppointmentsByEmail(String email){
-
-    }
-
-    public List<RatingDTO> getRatingsByDoctorEmail(String email){
-
-    }
-
-    public void addAvailabilitySlots(String email, List<SlotDTO> slots) {
-
-    }
-
+    @Override
+    @Transactional // Ensures data consistency during the delete operation
     public void removeAvailabilitySlot(String email, SlotDTO slotDTO) {
 
+        // 1. Retrieve the Doctor from the database
+        Doctor doctor = doctorRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Doctor not found"));
+
+        // 2. Check if the doctor has any slots to remove
+        if (doctor.getAvailableSlots() == null || doctor.getAvailableSlots().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No availability slots found to remove");
+        }
+
+        // 3. Perform removal using a Lambda predicate
+        // 'removeIf' iterates through the list and removes elements that match the condition.
+        // It returns 'true' if any elements were removed.
+        boolean removed = doctor.getAvailableSlots().removeIf(slot -> {
+
+            // Compare DateTime (Use isEqual to handle potential precision differences)
+            boolean sameTime = slot.getDateTime().isEqual(slotDTO.getDateTime());
+
+            // Compare Location (City and Address) to ensure we delete the correct slot
+            // We only compare location if it is provided in the DTO
+            boolean sameLocation = true;
+            if (slotDTO.getLocation() != null && slot.getLocation() != null) {
+                boolean sameCity = slot.getLocation().getCity().equalsIgnoreCase(slotDTO.getLocation().getCity());
+                boolean sameAddress = slot.getLocation().getAddress().equalsIgnoreCase(slotDTO.getLocation().getAddress());
+                sameLocation = sameCity && sameAddress;
+            }
+
+            return sameTime && sameLocation;
+        });
+
+        // 4. Handle the case where the slot was not found in the list
+        if (!removed) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "The specified slot was not found in the doctor's agenda");
+        }
+
+        // 5. Persist the updated doctor document to MongoDB
+        doctorRepository.save(doctor);
     }
     @Override
     // NOTA BENE:
@@ -151,6 +252,6 @@ public class DoctorServiceImplementation implements DoctorService {
         // Il corpo del metodo può essere vuoto!
         // L'annotazione fa tutto il lavoro sporco su Redis prima (o dopo) l'esecuzione.
         // Mettiamo un log solo per debug.
-        log.info("Cache invalidata per il dottore: {}. Al prossimo accesso i dati verranno ricaricati da MongoDB.", email);
+        log.info("Cache invalidata per il dottore: {}. Al prossimo accesso i dati verranno ricaricati da MongoDB.", id);
     }
 }

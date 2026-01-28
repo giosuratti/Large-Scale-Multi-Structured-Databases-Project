@@ -45,7 +45,7 @@ public interface DoctorService {
 
     List<AppointmentDTO> getAppointmentsByEmail(String email);
 
-    List<RatingDTO> getRatingsByDoctorEmail(String email);
+    DoctorRatingDTO getRatingsByDoctorEmail(String email);
 
     void addAvailabilitySlots(String email, List<SlotDTO> slots);
 

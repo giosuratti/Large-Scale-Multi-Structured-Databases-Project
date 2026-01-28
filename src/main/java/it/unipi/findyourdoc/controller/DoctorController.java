@@ -108,7 +108,7 @@ public class DoctorController {
     @Operation(summary = "Get all ratings for a specific doctor",
             description = "Public endpoint to view all feedback for a doctor.")
     @GetMapping("/ratings")
-    public ResponseEntity<List<RatingDTO>> getDoctorRatings(HttpServletRequest request) {
+    public ResponseEntity<DoctorRatingDTO> getDoctorRatings(HttpServletRequest request) {
         String token = jwtTokenProvider.resolveToken(request);
         String email = jwtTokenProvider.getEmailFromToken(token);
         return ResponseEntity.ok(doctorService.getRatingsByDoctorEmail(email));

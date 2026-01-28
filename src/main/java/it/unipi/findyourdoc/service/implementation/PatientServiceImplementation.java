@@ -439,13 +439,9 @@ public class PatientServiceImplementation implements PatientService {
         doctorRepository.save(doctor);
 
         // 7. Ritorna il DTO
-        return mapToRatingDTO(newRating);
+        return Mapper.mapToPatientRatingDTO(newRating);
     }
 
-
-    /**
-     * Mapper da Entity a DTO
-     */
 
 
     @Override
@@ -464,14 +460,9 @@ public class PatientServiceImplementation implements PatientService {
 
         // 3. Mapping: convertiamo ogni Rating (Entity) nel RatingDTO per il frontend
         return patient.getRatings().stream()
-                .map(Mapper::mapToRatingDTO)
+                .map(Mapper::mapToPatientRatingDTO)
                 .collect(Collectors.toList());
     }
-
-    // --- Metodi di Mapping Helper ---
-
-
-
 
 
     public List<SpecialistDTO> findSpecialistsByDiagnosisAndCity(String city, String diagnosis) {

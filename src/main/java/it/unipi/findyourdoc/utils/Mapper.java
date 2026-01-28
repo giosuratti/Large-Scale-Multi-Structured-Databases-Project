@@ -3,6 +3,8 @@ package it.unipi.findyourdoc.utils;
 import it.unipi.findyourdoc.dto.mongo.*;
 import it.unipi.findyourdoc.model.mongo.*;
 
+import java.util.ArrayList;
+
 public class Mapper {
 
     public static AppointmentPatientDTO mapToPatientDTO(AppointmentFull entity) {
@@ -51,7 +53,7 @@ public class Mapper {
         return dto;
     }
 
-    public static RatingDTO mapToRatingDTO(Rating rating) {
+    public static RatingDTO mapToPatientRatingDTO(Rating rating) {
         RatingDTO dto = new RatingDTO();
         dto.setDoctorId(rating.getDoctorId());
         dto.setRating(rating.getRating());
@@ -98,4 +100,51 @@ public class Mapper {
         return loc;
     }
 
+    public static DoctorReadDTO mapToReadDTO(Doctor d) {
+        DoctorReadDTO dto = new DoctorReadDTO();
+        dto.setId(String.valueOf(d.getId()));
+        dto.setEmail(d.getEmail());
+        dto.setTelephone(d.getTelephone());
+        dto.setCreatedAt(d.getCreatedAt());
+
+        dto.setFirstName(d.getFirstName());
+        dto.setLastName(d.getLastName());
+        dto.setSpecializations(d.getSpecialties());
+        dto.setGender(d.getGender());
+
+        if (d.getLocation() != null) {
+            dto.setLocation(new LocationDTO(
+                    d.getLocation().getAddress(),
+                    d.getLocation().getCity(),
+                    d.getLocation().getState(),
+                    d.getLocation().getZipCode()
+            ));
+        }
+        return dto;
+    }
+
+    public static AppointmentDTO toAppointmentDTO(AppointmentFull entity) {
+        if (entity == null) return null;
+
+        AppointmentDTO dto = new AppointmentDTO();
+        dto.setId(entity.getId());
+        dto.setDoctorId(entity.getDoctorId());
+        // Mappiamo i nomi completi per comodità di visualizzazione
+        dto.setPatientFirstName(entity.getPatientFirstName());
+        dto.setPatientLastName(entity.getPatientLastName());
+
+        dto.setDateTime(entity.getDateTime());
+        dto.setStatus(entity.getStatus());
+
+        return dto;
+    }
+
+    public static DoctorRatingDTO mapToDoctorRatingDTO(ArrayList<Integer> ratings) {
+        // Gestione null safety: se la lista è null, restituisci un DTO con lista vuota
+        if (ratings == null) {
+            return new DoctorRatingDTO(new ArrayList<>());
+        }
+
+        return new DoctorRatingDTO(ratings);
+    }
 }
