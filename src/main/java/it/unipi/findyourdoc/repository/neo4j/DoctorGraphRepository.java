@@ -22,7 +22,8 @@ public interface DoctorGraphRepository extends Neo4jRepository<DoctorNode, Long>
             "RETURN doc.firstName AS firstName," +
             "       doc.lastName AS lastName, " +
             "       spec.name AS specialization, " +
-            "       doc.city AS city, " +        // <--- Mappa sul campo 'city' del DTO
+            "       doc.city AS city, " + // <--- Mappa sul campo 'city' del DTO
+            "       doc.phone AS phone " +
             "       coalesce(doc.rating, 0.0) AS rating " +
 
             "ORDER BY rating DESC")

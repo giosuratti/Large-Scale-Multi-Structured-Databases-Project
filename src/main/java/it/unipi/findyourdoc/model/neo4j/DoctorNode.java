@@ -16,7 +16,7 @@ public class DoctorNode {
     private String firstName;
     private String lastName;
     private String city;
-    private String telephone;
+    private String phone;
 
     private Double averageRating;
 

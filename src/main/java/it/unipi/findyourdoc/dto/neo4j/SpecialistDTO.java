@@ -1,7 +1,6 @@
 package it.unipi.findyourdoc.dto.neo4j;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import it.unipi.findyourdoc.dto.mongo.LocationDTO;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -31,5 +30,5 @@ public class SpecialistDTO {
     private String city;
 
     @Schema(description = "Numero di telefono del medico")
-    private String telephone;
+    private String phone;
 }
