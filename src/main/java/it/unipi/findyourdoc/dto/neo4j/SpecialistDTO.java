@@ -27,6 +27,9 @@ public class SpecialistDTO {
     @Schema(description = "Valutazione media ricevuta dai pazienti (da 1 a 5)", example = "4.8")
     private float rating;
 
-    @Schema(description = "Dati relativi alla posizione geografica e indirizzo dello studio medico")
+    @Schema(description = "Città del medico")
     private String city;
+
+    @Schema(description = "Numero di telefono del medico")
+    private String telephone;
 }
