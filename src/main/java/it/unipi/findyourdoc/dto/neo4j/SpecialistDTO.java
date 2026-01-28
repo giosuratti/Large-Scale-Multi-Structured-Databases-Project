@@ -28,5 +28,5 @@ public class SpecialistDTO {
     private float rating;
 
     @Schema(description = "Dati relativi alla posizione geografica e indirizzo dello studio medico")
-    private LocationDTO location;
+    private String city;
 }

@@ -16,4 +16,6 @@ public interface AdminService {
     AdminReadDTO getAdminByEmail(String email);
     void deleteUser(String id);
     void changeUserPassword(String id, String password);
+
+    void syncDoctorRatings();
 }

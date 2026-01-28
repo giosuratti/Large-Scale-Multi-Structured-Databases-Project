@@ -9,11 +9,13 @@ import it.unipi.findyourdoc.model.mongo.Patient;
 import it.unipi.findyourdoc.repository.mongo.AdminRepository;
 import it.unipi.findyourdoc.repository.mongo.DoctorRepository;
 import it.unipi.findyourdoc.repository.mongo.PatientRepository;
+import it.unipi.findyourdoc.repository.neo4j.DoctorGraphRepository;
 import it.unipi.findyourdoc.service.AdminService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -24,8 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -40,6 +41,7 @@ public class AdminServiceImplementation implements AdminService {
     private final PasswordEncoder passwordEncoder;
     private final DoctorRepository doctorRepository;
     private final PatientRepository patientRepository;
+    private final DoctorGraphRepository doctorGraphRepository;
     private static final Logger log = LoggerFactory.getLogger(DoctorServiceImplementation.class);
 
     @Autowired
@@ -231,5 +233,43 @@ public class AdminServiceImplementation implements AdminService {
         // Se gestissi una Blacklist dei token JWT su Redis, qui dovresti aggiungere
         // una logica per invalidare tutti i token attivi di questo utente.
         // Es: tokenBlacklistService.invalidateAllTokensForUser(id);
+    }
+
+    @Override
+    @Transactional
+    // REDIS: Tasto nucleare. Stiamo cambiando i criteri di ordinamento globali.
+    // Dobbiamo invalidare TUTTE le ricerche salvate in cache, non solo una città specifica.
+    @CacheEvict(value = {"specialist_search", "doctors_search_city"}, allEntries = true)
+    public void syncDoctorRatings() {
+        log.info("Inizio sincronizzazione rating da MongoDB a Neo4j...");
+
+        // 1. Recuperiamo tutti i dottori da Mongo
+        // Ottimizzazione: se hai tanti dati, usa una proiezione per prendere solo ID e Rating
+        List<Doctor> mongoDoctors = doctorRepository.findAll();
+
+        // 2. Prepariamo la lista per il Bulk Update di Neo4j
+        List<Map<String, Object>> batchUpdates = new ArrayList<>();
+
+        for (Doctor doc : mongoDoctors) {
+            Map<String, Object> updateEntry = new HashMap<>();
+            updateEntry.put("id", doc.getId()); // Assicurati che questo ID corrisponda all'NPI su Neo4j
+            updateEntry.put("rating", doc.getAvgRating());
+            batchUpdates.add(updateEntry);
+        }
+
+        // 3. Eseguiamo l'aggiornamento su Neo4j
+        if (!batchUpdates.isEmpty()) {
+            // Eseguiamo a blocchi di 500 per non intasare la memoria se hai 1 milione di dottori
+            int batchSize = 500;
+            for (int i = 0; i < batchUpdates.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, batchUpdates.size());
+                List<Map<String, Object>> subList = batchUpdates.subList(i, end);
+
+                doctorGraphRepository.bulkUpdateRatings(subList);
+                log.info("Aggiornati {} dottori su Neo4j...", end);
+            }
+        }
+
+        log.info("Sincronizzazione completata con successo.");
     }
 }

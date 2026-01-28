@@ -115,5 +115,17 @@ public class AdminController {
         return ResponseEntity.ok("Password successfully updated for user ID: " + id);
     }
 
+    @PostMapping("/sync-ratings")
+    @PreAuthorize("hasRole('ADMIN')") // Assicurati che solo l'admin possa farlo
+    public ResponseEntity<String> syncRatings() {
+
+        long start = System.currentTimeMillis();
+
+        adminService.syncDoctorRatings();
+
+        long duration = System.currentTimeMillis() - start;
+        return ResponseEntity.ok("Sincronizzazione completata in " + duration + " ms. Cache invalidata.");
+    }
+
 
 }

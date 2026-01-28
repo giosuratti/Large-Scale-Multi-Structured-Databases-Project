@@ -7,11 +7,16 @@ import it.unipi.findyourdoc.repository.mongo.AppointmentRepository;
 import it.unipi.findyourdoc.repository.mongo.DoctorRepository;
 import it.unipi.findyourdoc.repository.mongo.PatientRepository;
 import it.unipi.findyourdoc.repository.mongo.SymptomReportRepository;
+import it.unipi.findyourdoc.repository.neo4j.DiseaseRepository;
+import it.unipi.findyourdoc.repository.neo4j.DoctorGraphRepository;
 import it.unipi.findyourdoc.service.DoctorService;
 import it.unipi.findyourdoc.service.PatientService;
 import it.unipi.findyourdoc.service.RedisSlotService;
 import it.unipi.findyourdoc.utils.Mapper;
 import lombok.RequiredArgsConstructor;
+import org.jspecify.annotations.NonNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
@@ -26,7 +31,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static it.unipi.findyourdoc.utils.Mapper.*;
+import static it.unipi.findyourdoc.utils.Mapper.mapLocationDtoToEntity;
+import static it.unipi.findyourdoc.utils.Mapper.mapToReadDTO;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +43,10 @@ public class PatientServiceImplementation implements PatientService {
     private final DoctorRepository doctorRepository;
     private final AppointmentRepository appointmentRepository;
     private final SymptomReportRepository symptomReportRepository;
+    private final DiseaseRepository diseaseRepository;
+    private final DoctorGraphRepository doctorGraphRepository;
+    private final DoctorService doctorService; // Serve per invalidare la cache del dottore
+    private static final Logger log = LoggerFactory.getLogger(DoctorServiceImplementation.class);
 
     @Autowired
     private RedisSlotService redisSlotService; // Il servizio di locking che abbiamo creato
@@ -134,7 +144,7 @@ public class PatientServiceImplementation implements PatientService {
             doctorRepository.save(doctor);
         }
     }
-    private DoctorService doctorService; // Serve per invalidare la cache del dottore
+
 
     @Override
     public PatientReadDTO registerPatient(PatientCreateDTO createDTO) {
@@ -218,7 +228,7 @@ public class PatientServiceImplementation implements PatientService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Appuntamento non trovato"));
 
         // Controllo di coerenza: non possiamo cancellare visite già fatte o cancellate
-        if (!"BOOKED".equals(appointment.getStatus())) {
+        if (!AppointmentStatus.SCHEDULED.equals(appointment.getStatus())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Impossibile cancellare un appuntamento già completato o disdetto.");
         }
@@ -271,15 +281,7 @@ public class PatientServiceImplementation implements PatientService {
                 .orElseThrow(() -> new RuntimeException("Dottore non trovato durante il ripristino slot"));
 
         // Creiamo il nuovo slot da reinserire
-        Slot slotRestored = new Slot();
-        slotRestored.setDateTime(appointment.getDateTime());
-
-        // Recuperiamo la location (dobbiamo essere sicuri che sia la stessa dell'appuntamento)
-        // Se nell'appuntamento hai salvato la Location completa, usala.
-        // Altrimenti, assumiamo che il dottore sia nello stesso posto (semplificazione).
-        // Per precisione, dovresti salvare la Location esatta dentro AppointmentFull.
-        // Qui assumo che AppointmentFull abbia un campo Location o recupero quella del dottore.
-        slotRestored.setLocation(doctor.getLocation()); // O appointment.getLocation() se esiste
+        Slot slotRestored = getSlot(appointment, doctor);
 
         if (doctor.getAvailableSlots() == null) {
             doctor.setAvailableSlots(new ArrayList<>());
@@ -295,6 +297,19 @@ public class PatientServiceImplementation implements PatientService {
             doctor.getAvailableSlots().sort(Comparator.comparing(Slot::getDateTime));
             doctorRepository.save(doctor);
         }
+    }
+
+    private static @NonNull Slot getSlot(AppointmentFull appointment, Doctor doctor) {
+        Slot slotRestored = new Slot();
+        slotRestored.setDateTime(appointment.getDateTime());
+
+        // Recuperiamo la location (dobbiamo essere sicuri che sia la stessa dell'appuntamento)
+        // Se nell'appuntamento hai salvato la Location completa, usala.
+        // Altrimenti, assumiamo che il dottore sia nello stesso posto (semplificazione).
+        // Per precisione, dovresti salvare la Location esatta dentro AppointmentFull.
+        // Qui assumo che AppointmentFull abbia un campo Location o recupero quella del dottore.
+        slotRestored.setLocation(doctor.getLocation()); // O appointment.getLocation() se esiste
+        return slotRestored;
     }
 
     @Override
@@ -367,12 +382,23 @@ public class PatientServiceImplementation implements PatientService {
         report.setContext(createDTO.getContext());
         report.setCreatedAt(LocalDateTime.now());
 
-        /*
-
-
-        PARTE DI NEO4J CON POSSIBILI DIAGNOSI!!!!!!!!
-
+        /* * 4. PARTE DI NEO4J: INTELLIGENZA DIAGNOSTICA
+         * Interroghiamo il grafo per ottenere le diagnosi pesate in base ai sintomi.
          */
+        ArrayList<String> suggestedDiagnoses = new ArrayList<>();
+
+        // Controlliamo che la lista sintomi non sia vuota per evitare chiamate inutili
+        if (createDTO.getSymptoms() != null && !createDTO.getSymptoms().isEmpty()) {
+
+            // Chiamata al DB a Grafo (Neo4j)
+            suggestedDiagnoses = diseaseRepository.findPossibleDiagnoses(createDTO.getSymptoms());
+
+            log.info("Neo4j ha suggerito {} diagnosi per i sintomi {}", suggestedDiagnoses.size(), createDTO.getSymptoms());
+        }
+
+        // Salviamo il risultato nel documento MongoDB.
+        // Se la lista è vuota, MongoDB salverà un array vuoto [].
+        report.setPossibleDiagnosies(suggestedDiagnoses);
 
         // 5. Persistenza su MongoDB
         symptomReportRepository.save(report);
@@ -465,8 +491,13 @@ public class PatientServiceImplementation implements PatientService {
     }
 
 
+    @Override
+    @Cacheable(value = "specialist_search", key = "{#city, #diagnosis}")
     public List<SpecialistDTO> findSpecialistsByDiagnosisAndCity(String city, String diagnosis) {
-        
+
+        log.info("Neo4j Query: Diagnosi='{}', Città='{}'", diagnosis, city);
+
+        return doctorGraphRepository.findSpecialistsByDiagnosisAndCity(city, diagnosis);
     }
 
 
