@@ -19,7 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -177,13 +177,6 @@ public class DoctorServiceImplementation implements DoctorService {
             Slot slot = new Slot();
             slot.setDateTime(dto.getDateTime());
 
-            if (dto.getLocation() != null) {
-                Location location = new Location();
-                location.setCity(dto.getLocation().getCity());
-                location.setAddress(dto.getLocation().getAddress());
-                // Map latitude/longitude if available in DTO
-                slot.setLocation(location);
-            }
 
             newSlotsToAdd.add(dto.getDateTime());
         }
@@ -195,7 +188,7 @@ public class DoctorServiceImplementation implements DoctorService {
 
             // SORTING: Re-order the entire list chronologically (Oldest -> Newest)
             // This ensures the frontend receives an ordered list without needing extra logic
-            doctor.getAvailableSlots().sort(Comparator.comparing(Slot::getDateTime));
+            Collections.sort(doctor.getAvailableSlots());
 
             // Persist changes to MongoDB
             doctorRepository.save(doctor);

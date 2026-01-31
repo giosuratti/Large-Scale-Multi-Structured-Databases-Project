@@ -27,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -94,8 +95,6 @@ public class PatientServiceImplementation implements PatientService {
             // 5. Creazione dell'Entità Appuntamento (Snapshot dei dati)
             AppointmentFull appointment = new AppointmentFull();
             appointment.setDoctorId(doctor.getId());
-            appointment.setDoctorFirstName(doctor.getFirstName());
-            appointment.setDoctorLastName(doctor.getLastName());
             appointment.setSpecialties(doctor.getSpecialties());
             appointment.setDoctorRating(doctor.getAvgRating()); // Snapshot del rating attuale
 
@@ -294,7 +293,7 @@ public class PatientServiceImplementation implements PatientService {
         if (!exists) {
             doctor.getAvailableSlots().add(slotRestored);
             // Opzionale: riordiniamo gli slot per data
-            doctor.getAvailableSlots().sort(Comparator.comparing(Slot::getDateTime));
+            Collections.sort(doctor.getAvailableSlots());
             doctorRepository.save(doctor);
         }
     }
