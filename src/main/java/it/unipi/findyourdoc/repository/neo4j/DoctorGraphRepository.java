@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 @Repository
-public interface DoctorGraphRepository extends Neo4jRepository<DoctorNode, Long> {
+public interface DoctorGraphRepository extends Neo4jRepository<DoctorNode, String> {
 
     @Query("MATCH (dis:Disease {name: $diagnosis}) " +
             "MATCH (dis)-[:TREATED_BY]->(spec:Specialization) " +

@@ -82,7 +82,7 @@ public class PatientServiceImplementation implements PatientService {
             // --- FASE MONGODB: PERSISTENZA ---
 
             // 4. Controllo di sicurezza finale su DB (nel caso il lock fosse scaduto ma il db fosse stato scritto)
-            boolean alreadyBooked = appointmentRepository.existsByDoctorIdAndAppointmentDateTime(
+            boolean alreadyBooked = appointmentRepository.existsByDoctorIdAndDateTime(
                     doctor.getId(),
                     appointmentDTO.getDateTime()
             );
@@ -140,7 +140,7 @@ public class PatientServiceImplementation implements PatientService {
     // Metodo helper per rimuovere lo slot dall'array del dottore
     private void removeSlotFromDoctorAvailability(Doctor doctor, LocalDateTime slotTime) {
         if (doctor.getAvailableSlots() != null) {
-            doctor.getAvailableSlots().removeIf(slot -> slot.getDateTime().equals(slotTime));
+            doctor.getAvailableSlots().removeIf(slot -> slot.equals(slotTime));
             doctorRepository.save(doctor);
         }
     }
@@ -281,7 +281,7 @@ public class PatientServiceImplementation implements PatientService {
                 .orElseThrow(() -> new RuntimeException("Dottore non trovato durante il ripristino slot"));
 
         // Creiamo il nuovo slot da reinserire
-        Slot slotRestored = getSlot(appointment, doctor);
+        LocalDateTime slotRestored = getSlot(appointment);
 
         if (doctor.getAvailableSlots() == null) {
             doctor.setAvailableSlots(new ArrayList<>());
@@ -289,7 +289,7 @@ public class PatientServiceImplementation implements PatientService {
 
         // Evitiamo duplicati (caso raro ma possibile)
         boolean exists = doctor.getAvailableSlots().stream()
-                .anyMatch(s -> s.getDateTime().equals(slotRestored.getDateTime()));
+                .anyMatch(s -> s.equals(slotRestored));
 
         if (!exists) {
             doctor.getAvailableSlots().add(slotRestored);
@@ -299,17 +299,8 @@ public class PatientServiceImplementation implements PatientService {
         }
     }
 
-    private static @NonNull Slot getSlot(AppointmentFull appointment, Doctor doctor) {
-        Slot slotRestored = new Slot();
-        slotRestored.setDateTime(appointment.getDateTime());
-
-        // Recuperiamo la location (dobbiamo essere sicuri che sia la stessa dell'appuntamento)
-        // Se nell'appuntamento hai salvato la Location completa, usala.
-        // Altrimenti, assumiamo che il dottore sia nello stesso posto (semplificazione).
-        // Per precisione, dovresti salvare la Location esatta dentro AppointmentFull.
-        // Qui assumo che AppointmentFull abbia un campo Location o recupero quella del dottore.
-        slotRestored.setLocation(doctor.getLocation()); // O appointment.getLocation() se esiste
-        return slotRestored;
+    private static @NonNull LocalDateTime getSlot(AppointmentFull appointment) {
+        return appointment.getDateTime();
     }
 
     @Override
@@ -320,7 +311,7 @@ public class PatientServiceImplementation implements PatientService {
 
         // 1. Recupera gli appuntamenti dal Repository
         // Consiglio: Aggiungi "OrderBy...Desc" nel repository per avere i più recenti in alto
-        List<AppointmentFull> appointments = appointmentRepository.findByPatientEmailOrderByAppointmentDateTimeDesc(email);
+        List<AppointmentFull> appointments = appointmentRepository.findByPatientIdOrderByDateTimeDesc(email);
 
         // 2. Mappa le entità in DTO
         return appointments.stream()

@@ -117,7 +117,7 @@ public class DoctorServiceImplementation implements DoctorService {
 
         // 1. Query su MongoDB
         // Assumiamo che tu abbia un metodo nel repository per cercare per email del dottore
-        List<AppointmentFull> appointments = appointmentRepository.findByDoctorEmail(email);
+        List<AppointmentFull> appointments = appointmentRepository.findByDoctorId(email);
 
         // 2. Mapping Entity -> DTO
         // Usiamo il mapper centralizzato per trasformare la lista
@@ -154,7 +154,7 @@ public class DoctorServiceImplementation implements DoctorService {
             doctor.setAvailableSlots(new ArrayList<>());
         }
 
-        List<Slot> newSlotsToAdd = new ArrayList<>();
+        List<LocalDateTime> newSlotsToAdd = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
 
         // 3. Process incoming slots
@@ -167,7 +167,7 @@ public class DoctorServiceImplementation implements DoctorService {
 
             // B. DUPLICATE CHECK: Ensure no slot exists at the exact same time
             boolean exists = doctor.getAvailableSlots().stream()
-                    .anyMatch(existingSlot -> existingSlot.getDateTime().isEqual(dto.getDateTime()));
+                    .anyMatch(existingSlot -> existingSlot.isEqual(dto.getDateTime()));
 
             if (exists) {
                 continue; // Skip duplicates to maintain data integrity
@@ -185,7 +185,7 @@ public class DoctorServiceImplementation implements DoctorService {
                 slot.setLocation(location);
             }
 
-            newSlotsToAdd.add(slot);
+            newSlotsToAdd.add(dto.getDateTime());
         }
 
         // 4. Save and Sort only if there are valid new slots
@@ -218,22 +218,7 @@ public class DoctorServiceImplementation implements DoctorService {
         // 3. Perform removal using a Lambda predicate
         // 'removeIf' iterates through the list and removes elements that match the condition.
         // It returns 'true' if any elements were removed.
-        boolean removed = doctor.getAvailableSlots().removeIf(slot -> {
-
-            // Compare DateTime (Use isEqual to handle potential precision differences)
-            boolean sameTime = slot.getDateTime().isEqual(slotDTO.getDateTime());
-
-            // Compare Location (City and Address) to ensure we delete the correct slot
-            // We only compare location if it is provided in the DTO
-            boolean sameLocation = true;
-            if (slotDTO.getLocation() != null && slot.getLocation() != null) {
-                boolean sameCity = slot.getLocation().getCity().equalsIgnoreCase(slotDTO.getLocation().getCity());
-                boolean sameAddress = slot.getLocation().getAddress().equalsIgnoreCase(slotDTO.getLocation().getAddress());
-                sameLocation = sameCity && sameAddress;
-            }
-
-            return sameTime && sameLocation;
-        });
+        boolean removed = doctor.getAvailableSlots().removeIf(slot -> slot.isEqual(slotDTO.getDateTime()));
 
         // 4. Handle the case where the slot was not found in the list
         if (!removed) {

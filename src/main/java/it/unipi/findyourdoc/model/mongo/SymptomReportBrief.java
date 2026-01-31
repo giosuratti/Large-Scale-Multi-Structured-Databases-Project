@@ -19,7 +19,6 @@ public class SymptomReportBrief {
     protected ArrayList<String> possibleDiagnosies;
 
     @CreatedDate
-    @Field("created_at")
     protected LocalDateTime createdAt;
 
 }

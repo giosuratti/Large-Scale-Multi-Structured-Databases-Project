@@ -11,13 +11,11 @@ public class Mapper {
         AppointmentPatientDTO dto = new AppointmentPatientDTO();
 
         // 1. Dati tecnici
-        dto.setId(entity.getId());
+        dto.setId(entity.getAppointmentId());
         dto.setDateTime(entity.getDateTime()); // O getAppointmentDateTime() a seconda del tuo modello
         dto.setStatus(entity.getStatus()); // Es. "BOOKED"
 
         // 2. Chi incontrerò? (Dati Dottore snapshot)
-        dto.setDoctorFirstName(entity.getDoctorFirstName());
-        dto.setDoctorLastName(entity.getDoctorLastName());
 
         // Gestione sicura della lista specializzazioni
         if (entity.getSpecialties() != null && !entity.getSpecialties().isEmpty()) {
@@ -127,7 +125,7 @@ public class Mapper {
         if (entity == null) return null;
 
         AppointmentDTO dto = new AppointmentDTO();
-        dto.setId(entity.getId());
+        dto.setId(entity.getAppointmentId());
         dto.setDoctorId(entity.getDoctorId());
         // Mappiamo i nomi completi per comodità di visualizzazione
         dto.setPatientFirstName(entity.getPatientFirstName());
@@ -146,5 +144,32 @@ public class Mapper {
         }
 
         return new DoctorRatingDTO(ratings);
+    }
+
+    public static AdminReadDTO mapToReadDTO(Admin admin) {
+        AdminReadDTO dto = new AdminReadDTO();
+        // Convertiamo l'ID int in String per il DTO
+        dto.setId(String.valueOf(admin.getId()));
+        dto.setEmail(admin.getEmail());
+        dto.setTelephone(admin.getTelephone());
+        dto.setCreatedAt(admin.getCreatedAt());
+        return dto;
+    }
+
+    public static AppointmentDoctor mapToAppointmentDoctor(AppointmentFull full) {
+        AppointmentDoctor docAppt = new AppointmentDoctor();
+
+        // Campi ereditati da AppointmentBrief
+        docAppt.setAppointmentId(full.getAppointmentId());
+        docAppt.setDateTime(full.getDateTime());
+        docAppt.setLocation(full.getLocation());
+        docAppt.setStatus(full.getStatus());
+
+        // Campi specifici di AppointmentDoctor (Dati Paziente)
+        docAppt.setPatientFirstName(full.getPatientFirstName());
+        docAppt.setPatientLastName(full.getPatientLastName());
+        docAppt.setPatientTelephone(full.getPatientTelephone());
+
+        return docAppt;
     }
 }

@@ -7,87 +7,81 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-/**
- * Main configuration class for Spring Security.
- *
- * <p>This class configures the application to use stateless authentication via JWT, disables
- * standard web protections that are not needed for REST APIs (like CSRF), and defines the global
- * access rules for HTTP endpoints.
- *
- * <p>It leverages {@link EnableMethodSecurity} to allow fine-grained access control directly on
- * service or controller methods using annotations like {@code @PreAuthorize}.
- */
+import java.util.Arrays;
+import java.util.List;
+
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity // Essential for @PreAuthorize to work
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
     private final JwtTokenFilter jwtTokenFilter;
 
     /**
-     * Configures the Security Filter Chain.
-     *
-     * <p>This method defines the security policy for HTTP requests:
-     *
-     * <ul>
-     *   <li>Disables CSRF, Form Login, and HTTP Basic authentication (API-centric approach).
-     *   <li>Sets the session management policy to {@link SessionCreationPolicy#STATELESS} since JWTs
-     *       are used.
-     *   <li>Whitelists public endpoints such as authentication routes and Swagger UI documentation.
-     *   <li>Configures a "permit all" default strategy, relying on method-level security for
-     *       protection.
-     *   <li>Registers the custom {@link JwtTokenFilter} before the standard Spring Security
-     *       authentication filter.
-     * </ul>
-     *
-     * @param http The {@link HttpSecurity} object to configure.
-     * @return The built {@link SecurityFilterChain}.
-     * @throws Exception If an error occurs during configuration.
+     * FIX: This bean bypasses the Security Filter Chain entirely for Swagger resources.
+     * This prevents the "Invalid mapping pattern" error caused by the new PathPatternParser
+     * conflicting with Swagger's internal resource paths.
      */
+
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return (web) -> web.ignoring()
+                // Usiamo esplicitamente AntPathRequestMatcher per ogni percorso
+                .requestMatchers(new AntPathRequestMatcher("/v3/api-docs/**"))
+                .requestMatchers(new AntPathRequestMatcher("/swagger-ui/**"))
+                .requestMatchers(new AntPathRequestMatcher("/swagger-ui.html"))
+                .requestMatchers(new AntPathRequestMatcher("/swagger-resources/**"))
+                .requestMatchers(new AntPathRequestMatcher("/webjars/**"));
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http.csrf(AbstractHttpConfigurer::disable)
+        http
+                .csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
-                .sessionManagement(
-                        session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(
-                        auth ->
-                                auth
-                                        // 1. Allow Auth endpoints (Login, Register)
-                                        .requestMatchers("/api/auth/**")
-                                        .permitAll()
-
-                                        // 2. Allow Swagger UI and API Docs
-                                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
-                                        .permitAll()
-
-                                        // 3. ALLOW EVERYTHING ELSE BY DEFAULT
-                                        // The strategy here is to open the API by default and restrict specific
-                                        // methods using @PreAuthorize in the controllers/services.
-                                        .anyRequest()
-                                        .permitAll())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        // Anche qui, meglio essere espliciti se continua a dare errore
+                        .requestMatchers(new AntPathRequestMatcher("/api/auth/**")).permitAll()
+                        .anyRequest().permitAll()
+                )
                 .addFilterBefore(jwtTokenFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
     /**
-     * Provides the password encoder bean.
-     *
-     * <p>Uses {@link BCryptPasswordEncoder}, which is a strong hashing function specifically designed
-     * for password storage.
-     *
-     * @return A new instance of {@link BCryptPasswordEncoder}.
+     * Configures CORS to allow requests from your frontend (usually localhost:3000 or 4200)
      */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(List.of("*")); // Change to specific origins in production
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(Arrays.asList("authorization", "content-type", "x-auth-token"));
+        configuration.setExposedHeaders(List.of("x-auth-token"));
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();

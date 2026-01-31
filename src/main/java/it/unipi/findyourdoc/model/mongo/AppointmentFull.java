@@ -15,9 +15,9 @@ import java.util.ArrayList;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class AppointmentFull extends AppointmentPatient {
-    private String id;
+public class AppointmentFull extends AppointmentBrief{
     private String patientId;
+    private String doctorId;
     private String patientFirstName;
     private String patientLastName;
     private String patientTelephone;
@@ -28,6 +28,5 @@ public class AppointmentFull extends AppointmentPatient {
     private String patientGender;
 
     @CreatedDate
-    @Field("created_at")
     private LocalDateTime createdAt;
 }

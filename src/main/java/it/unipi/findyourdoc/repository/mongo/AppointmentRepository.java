@@ -10,10 +10,10 @@ import java.util.List;
 @Repository
 public interface AppointmentRepository extends MongoRepository<AppointmentFull, String> {
 
-    public boolean existsByDoctorIdAndAppointmentDateTime(String id, LocalDateTime dateTime);
+    boolean existsByDoctorIdAndDateTime(String id, LocalDateTime dateTime);
 
-    List<AppointmentFull> findByPatientEmailOrderByAppointmentDateTimeDesc(String patientEmail);
+    List<AppointmentFull> findByPatientIdOrderByDateTimeDesc(String patientId);
 
-    List<AppointmentFull> findByDoctorEmail(String email);
+    List<AppointmentFull> findByDoctorId(String Id);
 
 }

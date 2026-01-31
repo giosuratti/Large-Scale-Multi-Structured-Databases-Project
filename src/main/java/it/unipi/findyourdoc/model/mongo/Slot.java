@@ -14,5 +14,4 @@ public class Slot {
 
     private Location location;
     private LocalDateTime dateTime;
-
 }

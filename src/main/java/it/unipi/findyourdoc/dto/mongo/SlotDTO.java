@@ -22,6 +22,4 @@ public class SlotDTO {
     )
     private LocalDateTime dateTime;
 
-    @Schema(description = "The specific medical office location for this slot")
-    private LocationDTO location;
 }

@@ -16,9 +16,6 @@ import java.util.ArrayList;
 @AllArgsConstructor
 public class Patient extends User{
 
-    @Id private String id;
-
-
     private String gender;
     private Integer age;
 

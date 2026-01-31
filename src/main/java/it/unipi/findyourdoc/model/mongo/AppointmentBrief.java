@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public abstract class AppointmentBrief {
-    @Id protected int appointmentId;
+    @Id protected String appointmentId;
     protected LocalDateTime dateTime;
     protected Location location;
     protected AppointmentStatus status;

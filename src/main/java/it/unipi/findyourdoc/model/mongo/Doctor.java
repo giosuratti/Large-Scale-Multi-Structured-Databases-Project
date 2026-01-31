@@ -5,6 +5,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
+
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 
 @EqualsAndHashCode(callSuper = false)
@@ -13,13 +15,12 @@ import java.util.ArrayList;
 @AllArgsConstructor
 public class Doctor extends User {
 
-    @Id private String id;
     private String firstName;
     private String lastName;
 
     private ArrayList<String> specialties;
-    private ArrayList<AppointmentDoctor> bookedToday;
-    private ArrayList<Slot> availableSlots;
+    private ArrayList<AppointmentDoctor> bookedThisWeek;
+    private ArrayList<LocalDateTime> availableSlots;
     private ArrayList<Integer> rating;
 
     private Location location;

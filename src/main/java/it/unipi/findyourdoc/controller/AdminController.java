@@ -127,5 +127,16 @@ public class AdminController {
         return ResponseEntity.ok("Sincronizzazione completata in " + duration + " ms. Cache invalidata.");
     }
 
+    @PostMapping("/refresh-weekly-slots")
+    @PreAuthorize("hasRole('ADMIN')") // Solo l'admin può lanciarlo
+    public ResponseEntity<String> refreshWeeklySlots() {
+        long start = System.currentTimeMillis();
+
+        adminService.refreshWeeklySlots();
+
+        long duration = System.currentTimeMillis() - start;
+        return ResponseEntity.ok("Slot settimanali aggiornati con successo in " + duration + " ms.");
+    }
+
 
 }

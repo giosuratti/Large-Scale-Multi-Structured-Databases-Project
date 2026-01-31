@@ -18,4 +18,6 @@ public interface AdminService {
     void changeUserPassword(String id, String password);
 
     void syncDoctorRatings();
+
+    void refreshWeeklySlots();
 }

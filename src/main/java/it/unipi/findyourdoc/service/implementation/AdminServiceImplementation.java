@@ -11,6 +11,7 @@ import it.unipi.findyourdoc.repository.mongo.DoctorRepository;
 import it.unipi.findyourdoc.repository.mongo.PatientRepository;
 import it.unipi.findyourdoc.repository.neo4j.DoctorGraphRepository;
 import it.unipi.findyourdoc.service.AdminService;
+import it.unipi.findyourdoc.utils.Mapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +19,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.BulkOperations;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -42,10 +48,13 @@ public class AdminServiceImplementation implements AdminService {
     private final DoctorRepository doctorRepository;
     private final PatientRepository patientRepository;
     private final DoctorGraphRepository doctorGraphRepository;
-    private static final Logger log = LoggerFactory.getLogger(DoctorServiceImplementation.class);
+    private static final Logger log = LoggerFactory.getLogger(AdminServiceImplementation.class);
 
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
+
+    @Autowired
+    private MongoTemplate mongoTemplate;
 
     @Override
     public AdminReadDTO createAdmin(AdminCreateDTO dto) {
@@ -64,7 +73,7 @@ public class AdminServiceImplementation implements AdminService {
         // o che MongoDB sia configurato per gestirlo.
 
         Admin savedAdmin = adminRepository.save(admin);
-        return mapToReadDTO(savedAdmin);
+        return Mapper.mapToReadDTO(savedAdmin);
     }
 
     @Override
@@ -90,25 +99,25 @@ public class AdminServiceImplementation implements AdminService {
             admin.setPassword(passwordEncoder.encode(dto.getPassword()));
         }
 
-        return mapToReadDTO(adminRepository.save(admin));
+        return Mapper.mapToReadDTO(adminRepository.save(admin));
     }
 
     @Override
     public AdminReadDTO getAdminByEmail(String email) {
         Admin admin = adminRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin not found"));
-        return mapToReadDTO(admin);
+        return Mapper.mapToReadDTO(admin);
     }
 
     @Override
     public Page<AdminReadDTO> getAllAdmins(Pageable pageable) {
-        return adminRepository.findAll(pageable).map(this::mapToReadDTO);
+        return adminRepository.findAll(pageable).map(Mapper::mapToReadDTO);
     }
 
     @Override
     public List<AdminReadDTO> searchAdmins(String emailPrefix) {
         return adminRepository.findByEmailStartingWith(emailPrefix).stream()
-                .map(this::mapToReadDTO)
+                .map(Mapper::mapToReadDTO)
                 .collect(Collectors.toList());
     }
 
@@ -123,15 +132,7 @@ public class AdminServiceImplementation implements AdminService {
     /**
      * Helper method to map Admin Entity to AdminReadDTO.
      */
-    private AdminReadDTO mapToReadDTO(Admin admin) {
-        AdminReadDTO dto = new AdminReadDTO();
-        // Convertiamo l'ID int in String per il DTO
-        dto.setId(String.valueOf(admin.getId()));
-        dto.setEmail(admin.getEmail());
-        dto.setTelephone(admin.getTelephone());
-        dto.setCreatedAt(admin.getCreatedAt());
-        return dto;
-    }
+
 
 
     @Override
@@ -272,4 +273,62 @@ public class AdminServiceImplementation implements AdminService {
 
         log.info("Sincronizzazione completata con successo.");
     }
+
+
+
+    @Override
+    @Transactional
+    // REDIS: Invalidiamo la cache poiché stiamo cambiando i dati visualizzati nei profili/agenda dei dottori
+    @CacheEvict(value = {"doctor_details", "doctors_search_city"}, allEntries = true)
+    public void refreshWeeklySlots() {
+        log.info("Inizio refresh agenda settimanale dei dottori (AppointmentDoctor)...");
+
+        // 1. RESET: Svuotiamo il campo 'bookedThisWeek' per TUTTI i dottori.
+        // Questo rimuove appuntamenti passati o cancellati.
+        Query updateAllQuery = new Query();
+        Update updateReset = new Update().set("bookedThisWeek", new ArrayList<>());
+        mongoTemplate.updateMulti(updateAllQuery, updateReset, Doctor.class);
+
+        // 2. DEFINIZIONE FINESTRA TEMPORALE (Prossimi 7 giorni)
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime nextWeek = now.plusDays(7).withHour(23).withMinute(59);
+
+        // 3. QUERY: Prendiamo gli AppointmentFull attivi dalla collection "appointments"
+        Criteria criteria = Criteria.where("dateTime").gte(now).lte(nextWeek)
+                // Includiamo solo quelli confermati o programmati (escludiamo cancellati)
+                .and("status").in(AppointmentStatus.CONFIRMED, AppointmentStatus.SCHEDULED, AppointmentStatus.PENDING);
+
+        List<AppointmentFull> upcomingAppointments = mongoTemplate.find(new Query(criteria), AppointmentFull.class);
+
+        // 4. MAPPING & RAGGRUPPAMENTO
+        // Convertiamo AppointmentFull -> AppointmentDoctor e raggruppiamo per DoctorId
+        Map<String, List<AppointmentDoctor>> appsByDoctor = upcomingAppointments.stream()
+                .collect(Collectors.groupingBy(
+                        AppointmentFull::getDoctorId, // Chiave della mappa
+                        Collectors.mapping(Mapper::mapToAppointmentDoctor, Collectors.toList()) // Valore: Lista convertita
+                ));
+
+        // 5. BULK UPDATE SU MONGO
+        if (!appsByDoctor.isEmpty()) {
+            BulkOperations bulkOps = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, Doctor.class);
+
+            for (Map.Entry<String, List<AppointmentDoctor>> entry : appsByDoctor.entrySet()) {
+                String doctorId = entry.getKey();
+                List<AppointmentDoctor> weeklyAppointments = entry.getValue();
+
+                Query query = new Query(Criteria.where("_id").is(doctorId));
+                Update update = new Update().set("bookedThisWeek", weeklyAppointments);
+
+                bulkOps.updateOne(query, update);
+            }
+
+            bulkOps.execute();
+            log.info("Agenda aggiornata per {} dottori.", appsByDoctor.size());
+        } else {
+            log.info("Nessun appuntamento trovato per la prossima settimana.");
+        }
+    }
+
+    // HELPER: Metodo privato per convertire Full -> Doctor
+
 }
