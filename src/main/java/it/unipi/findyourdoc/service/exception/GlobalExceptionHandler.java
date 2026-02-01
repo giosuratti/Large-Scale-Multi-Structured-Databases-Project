@@ -101,7 +101,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleGenericException(Exception ex) {
         Map<String, String> response = new HashMap<>();
         response.put("error", "Internal Server Error");
-        response.put("details", "An unexpected error occurred.");
+        response.put("details", "An unexpected error occurred: " + ex.getMessage());
         // Loggare l'eccezione qui per debug interno
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }

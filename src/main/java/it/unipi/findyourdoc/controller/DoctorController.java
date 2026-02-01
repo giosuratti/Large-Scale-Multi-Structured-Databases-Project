@@ -35,24 +35,8 @@ public class DoctorController {
     private final DoctorService doctorService;
     private final JwtTokenProvider jwtTokenProvider;
 
-    @Operation(
-            summary = "Register a new Doctor",
-            description = "Creates a new doctor account with professional details.")
-    @ApiResponses(
-            value = {
-                    @ApiResponse(
-                            responseCode = "200",
-                            description = "Doctor registered successfully",
-                            content = @Content(schema = @Schema(implementation = DoctorReadDTO.class))),
-                    @ApiResponse(
-                            responseCode = "400",
-                            description = "Invalid input or email already exists")
-            })
-    @PostMapping("/register")
-    public ResponseEntity<DoctorReadDTO> registerDoctor(
-            @RequestBody DoctorCreateDTO createDTO) {
-        return ResponseEntity.ok(doctorService.registerDoctor(createDTO));
-    }
+
+
 
     @Operation(
             summary = "Update Doctor Profile",
@@ -140,6 +124,14 @@ public class DoctorController {
 
         doctorService.removeAvailabilitySlot(email, slotDTO);
         return ResponseEntity.noContent().build(); // 204 No Content è lo standard per le cancellazioni
+    }
+
+    @GetMapping("/patient/{patientId}/symptom-reports")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(summary = "Ottiene i report dei sintomi recenti di un paziente specifico")
+    public ResponseEntity<List<SymptomReportBriefDTO>> getPatientSymptomReports(@PathVariable String patientId) {
+        List<SymptomReportBriefDTO> reports = doctorService.getPatientSymptomReports(patientId);
+        return ResponseEntity.ok(reports);
     }
 
 }

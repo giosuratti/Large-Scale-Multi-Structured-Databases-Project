@@ -2,15 +2,13 @@ package it.unipi.findyourdoc.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import it.unipi.findyourdoc.dto.mongo.AdminCreateDTO;
-import it.unipi.findyourdoc.dto.mongo.AdminReadDTO;
-import it.unipi.findyourdoc.dto.mongo.AdminUpdateDTO;
-import it.unipi.findyourdoc.dto.mongo.PasswordChangeDTO;
+import it.unipi.findyourdoc.dto.mongo.*;
 import it.unipi.findyourdoc.security.JwtTokenProvider;
 import it.unipi.findyourdoc.service.AdminService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -43,7 +41,7 @@ public class AdminController {
     @Operation(summary = "Create a new Administrator")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Admin created successfully",
-                    content = @Content(schema = @Schema(implementation = AdminReadDTO.class))),
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminReadDTO.class))),
             @ApiResponse(responseCode = "400", description = "Email already in use")
     })
     @PostMapping
@@ -53,6 +51,37 @@ public class AdminController {
 
     @Operation(summary = "Update current Administrator profile",
             description = "Updates the profile of the administrator currently authenticated via JWT.")
+    @ApiResponses(value = {
+
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Profile updated successfully",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = AdminReadDTO.class)
+                    )
+            ),
+
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request data"
+            ),
+
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Unauthorized - Invalid or missing JWT"
+            ),
+
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Forbidden - Admin role required"
+            ),
+
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Administrator not found"
+            )
+    })
     @PutMapping("/me")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AdminReadDTO> updateAdmin(
@@ -66,19 +95,63 @@ public class AdminController {
         return ResponseEntity.ok(adminService.updateAdmin(email, updateDTO));
     }
 
-    @Operation(summary = "Get current Admin profile",
-            description = "Retrieves the profile data of the administrator currently authenticated.")
+    @Operation(
+            summary = "Get current Admin profile",
+            description = "Retrieves the profile data of the administrator currently authenticated via JWT token."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Current Admin profile retrieved successfully",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = AdminReadDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Unauthorized - JWT token is missing, expired or invalid"
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Forbidden - The authenticated user does not have the ADMIN role"
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Not Found - Admin profile not found for the provided token"
+            )
+    })
     @GetMapping("/me")
-    @PreAuthorize("hasRole('ADMIN')") // Solo un admin può vedere il proprio profilo admin
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AdminReadDTO> getAdminMe(HttpServletRequest request) {
-
         String token = jwtTokenProvider.resolveToken(request);
         String email = jwtTokenProvider.getEmailFromToken(token);
 
         return ResponseEntity.ok(adminService.getAdminByEmail(email));
     }
 
-    @Operation(summary = "List all Administrators")
+    @Operation(
+            summary = "List all Administrators",
+            description = "Retrieves a paginated list of all administrators. You can specify the page number, size, and sorting criteria. Restricted to ADMIN role."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Paginated list retrieved successfully",
+                    content = @Content(
+                            mediaType = "application/json",
+                            // Nota: SpringDoc gestisce automaticamente il wrapping di Page,
+                            // ma specifichiamo l'entità contenuta per chiarezza.
+                            schema = @Schema(implementation = AdminReadDTO.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Unauthorized - Valid JWT token required"
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Forbidden - Admin role required"
+            )
+    })
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Page<AdminReadDTO>> getAllAdmins(
@@ -86,7 +159,32 @@ public class AdminController {
         return ResponseEntity.ok(adminService.getAllAdmins(pageable));
     }
 
-    @Operation(summary = "Search Administrators by Email Prefix")
+    @Operation(
+            summary = "Search Administrators by Email Prefix",
+            description = "Returns a list of administrators whose email starts with the provided string. Restricted to users with ADMIN role."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Search completed successfully",
+                    content = @Content(
+                            mediaType = "application/json",
+                            array = @ArraySchema(schema = @Schema(implementation = AdminReadDTO.class))
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid email prefix provided"
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Unauthorized - Authentication token is missing or invalid"
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Forbidden - Access restricted to Administrators"
+            )
+    })
     @GetMapping("/search")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<AdminReadDTO>> searchAdmins(@RequestParam String email) {
@@ -95,6 +193,28 @@ public class AdminController {
 
 
     @Operation(summary = "Delete a user by Id")
+    @ApiResponses({
+
+            @ApiResponse(
+                    responseCode = "204",
+                    description = "Admin deleted successfully"
+            ),
+
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Unauthorized"
+            ),
+
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Forbidden"
+            ),
+
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Admin not found"
+            )
+    })
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteAdmin(
@@ -105,6 +225,14 @@ public class AdminController {
 
     @Operation(summary = "Force password change for any user",
             description = "Allows an Admin to change the password of any Admin, Doctor, or Patient using their unique ID.")
+    @ApiResponse(
+            responseCode = "200",
+            description = "Password updated",
+            content = @Content(
+                    mediaType = "text/plain",
+                    schema = @Schema(type = "string")
+            )
+    )
     @PatchMapping("/accounts/{id}/password")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<String> forcePasswordChange(
@@ -116,6 +244,15 @@ public class AdminController {
     }
 
     @PostMapping("/sync-ratings")
+    @ApiResponse(
+            responseCode = "200",
+            description = "Ratings synchronized successfully",
+            content = @Content(
+                    mediaType = "text/plain",
+                    schema = @Schema(type = "string")
+            )
+    )
+
     @PreAuthorize("hasRole('ADMIN')") // Assicurati che solo l'admin possa farlo
     public ResponseEntity<String> syncRatings() {
 
@@ -128,6 +265,18 @@ public class AdminController {
     }
 
     @PostMapping("/refresh-weekly-slots")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Weekly slots refreshed successfully",
+                    content = @Content(
+                            mediaType = "text/plain",
+                            schema = @Schema(type = "string")
+                    )
+            ),
+            @ApiResponse(responseCode = "401", description = "Unauthorized"),
+            @ApiResponse(responseCode = "403", description = "Forbidden")
+    })
     @PreAuthorize("hasRole('ADMIN')") // Solo l'admin può lanciarlo
     public ResponseEntity<String> refreshWeeklySlots() {
         long start = System.currentTimeMillis();
@@ -136,6 +285,28 @@ public class AdminController {
 
         long duration = System.currentTimeMillis() - start;
         return ResponseEntity.ok("Slot settimanali aggiornati con successo in " + duration + " ms.");
+    }
+
+    @Operation(summary = "Register a new Doctor", description = "Allows an administrator to register a new doctor into the system.")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Doctor registered successfully",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = DoctorReadDTO.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid input data or email already in use"
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Forbidden - Only administrators can perform this action"
+            )
+    })
+    @PostMapping("/registerdoctor")
+    public ResponseEntity<DoctorReadDTO> registerDoctor(@RequestBody DoctorCreateDTO createDTO) {
+        return ResponseEntity.ok(adminService.registerDoctor(createDTO));
     }
 
 

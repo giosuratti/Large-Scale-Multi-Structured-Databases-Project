@@ -1,8 +1,6 @@
 package it.unipi.findyourdoc.service.implementation;
 
-import it.unipi.findyourdoc.dto.mongo.AdminCreateDTO;
-import it.unipi.findyourdoc.dto.mongo.AdminReadDTO;
-import it.unipi.findyourdoc.dto.mongo.AdminUpdateDTO;
+import it.unipi.findyourdoc.dto.mongo.*;
 import it.unipi.findyourdoc.model.mongo.*;
 import it.unipi.findyourdoc.repository.mongo.AdminRepository;
 import it.unipi.findyourdoc.repository.mongo.DoctorRepository;
@@ -327,6 +325,33 @@ public class AdminServiceImplementation implements AdminService {
         }
     }
 
-    // HELPER: Metodo privato per convertire Full -> Doctor
+    @Override
+    public DoctorReadDTO registerDoctor(DoctorCreateDTO createDTO) {
+        // 1. Verifica unicità email
+        if (doctorRepository.existsByEmail(createDTO.getEmail())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email already in use");
+        }
+
+        Doctor doctor = new Doctor();
+        // Campi base User
+        doctor.setEmail(createDTO.getEmail());
+        doctor.setTelephone(createDTO.getTelephone());
+        doctor.setPassword(passwordEncoder.encode(createDTO.getPassword()));
+        doctor.setCreatedAt(LocalDateTime.now());
+
+        // Campi specifici Doctor
+        doctor.setFirstName(createDTO.getFirstName());
+        doctor.setLastName(createDTO.getLastName());
+        doctor.setSpecialties(createDTO.getSpecializations());
+        doctor.setGender(createDTO.getGender());
+
+        // Mapping Location
+        if (createDTO.getLocation() != null) {
+            doctor.setLocation(Mapper.mapLocationDtoToEntity(createDTO.getLocation()));
+        }
+
+        Doctor savedDoctor = doctorRepository.save(doctor);
+        return Mapper.mapToReadDTO(savedDoctor);
+    }
 
 }

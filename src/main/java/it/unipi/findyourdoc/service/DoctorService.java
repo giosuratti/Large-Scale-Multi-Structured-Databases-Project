@@ -12,14 +12,8 @@ import java.util.List;
  */
 public interface DoctorService {
 
-    /**
-     * Registers a new doctor in the system.
-     *
-     * @param createDTO The DTO containing the doctor's professional and credential data.
-     * @return The created doctor profile details.
-     * @throws org.springframework.web.server.ResponseStatusException If the email is already in use.
-     */
-    DoctorReadDTO registerDoctor(DoctorCreateDTO createDTO);
+
+
 
     /**
      * Updates an existing doctor's professional profile.
@@ -52,4 +46,6 @@ public interface DoctorService {
     void removeAvailabilitySlot(String email, SlotDTO slotDTO);
 
     void invalidateDoctorCache(String id);
+
+    List<SymptomReportBriefDTO> getPatientSymptomReports(String patientId);
 }

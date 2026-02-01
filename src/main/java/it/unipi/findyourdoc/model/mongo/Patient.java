@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.util.ArrayList;
 
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Document(collection = "patients")
 public class Patient extends User{
 
     private String gender;
@@ -24,7 +26,7 @@ public class Patient extends User{
 
     private Location location;
 
-    private ArrayList<AppointmentBrief> bookedAppointments;
+    private ArrayList<AppointmentPatient> bookedAppointments;
 
     private ArrayList<Rating> ratings;
     private ArrayList<SymptomReportBrief> recentSymptomReports;

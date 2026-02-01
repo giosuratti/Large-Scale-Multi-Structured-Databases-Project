@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -13,6 +13,7 @@ import java.util.ArrayList;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Document(collection = "doctors")
 public class Doctor extends User {
 
     private String firstName;
@@ -21,7 +22,7 @@ public class Doctor extends User {
     private ArrayList<String> specialties;
     private ArrayList<AppointmentDoctor> bookedThisWeek;
     private ArrayList<LocalDateTime> availableSlots;
-    private ArrayList<Integer> rating;
+    private ArrayList<Integer> ratings;
 
     private Location location;
     private float avgRating;

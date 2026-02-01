@@ -19,7 +19,7 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 @OpenAPIDefinition(
-        info = @Info(title = "Nexus Scholar API", version = "1.0"),
+        info = @Info(title = "FindYourDoc API", version = "1.0"),
         security =
         @SecurityRequirement(
                 name = "bearerAuth") // Applies the "bearerAuth" scheme globally to all endpoints

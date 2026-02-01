@@ -4,6 +4,7 @@ import it.unipi.findyourdoc.dto.mongo.*;
 import it.unipi.findyourdoc.model.mongo.*;
 import it.unipi.findyourdoc.repository.mongo.AppointmentRepository;
 import it.unipi.findyourdoc.repository.mongo.DoctorRepository;
+import it.unipi.findyourdoc.repository.mongo.PatientRepository;
 import it.unipi.findyourdoc.service.DoctorService;
 import it.unipi.findyourdoc.utils.Mapper;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -31,36 +33,10 @@ public class DoctorServiceImplementation implements DoctorService {
     private final DoctorRepository doctorRepository;
     private final PasswordEncoder passwordEncoder;
     private final AppointmentRepository appointmentRepository;
+    private final PatientRepository patientRepository;
     private static final Logger log = LoggerFactory.getLogger(DoctorServiceImplementation.class);
 
-    @Override
-    public DoctorReadDTO registerDoctor(DoctorCreateDTO createDTO) {
-        // 1. Verifica unicità email
-        if (doctorRepository.existsByEmail(createDTO.getEmail())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email already in use");
-        }
 
-        Doctor doctor = new Doctor();
-        // Campi base User
-        doctor.setEmail(createDTO.getEmail());
-        doctor.setTelephone(createDTO.getTelephone());
-        doctor.setPassword(passwordEncoder.encode(createDTO.getPassword()));
-        doctor.setCreatedAt(LocalDateTime.now());
-
-        // Campi specifici Doctor
-        doctor.setFirstName(createDTO.getFirstName());
-        doctor.setLastName(createDTO.getLastName());
-        doctor.setSpecialties(createDTO.getSpecializations());
-        doctor.setGender(createDTO.getGender());
-
-        // Mapping Location
-        if (createDTO.getLocation() != null) {
-            doctor.setLocation(Mapper.mapLocationDtoToEntity(createDTO.getLocation()));
-        }
-
-        Doctor savedDoctor = doctorRepository.save(doctor);
-        return Mapper.mapToReadDTO(savedDoctor);
-    }
 
     @Override
     public DoctorReadDTO updateDoctor(String email, DoctorUpdateDTO updateDTO) {
@@ -137,7 +113,7 @@ public class DoctorServiceImplementation implements DoctorService {
 
 
         // 3. Mapping dei risultati
-        return Mapper.mapToDoctorRatingDTO(doctor.getRating());
+        return Mapper.mapToDoctorRatingDTO(doctor.getRatings());
     }
 
 
@@ -231,5 +207,24 @@ public class DoctorServiceImplementation implements DoctorService {
         // L'annotazione fa tutto il lavoro sporco su Redis prima (o dopo) l'esecuzione.
         // Mettiamo un log solo per debug.
         log.info("Cache invalidata per il dottore: {}. Al prossimo accesso i dati verranno ricaricati da MongoDB.", id);
+    }
+
+    @Override
+    public List<SymptomReportBriefDTO> getPatientSymptomReports(String patientId) {
+        // 1. Recupera il paziente intero dal DB
+        Patient patient = patientRepository.findById(patientId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Patient not found"));
+
+        // 2. Controllo di sicurezza: se la lista è null, restituisci lista vuota
+        if (patient.getRecentSymptomReports() == null || patient.getRecentSymptomReports().isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 3. Mapping della lista Brief dal modello al DTO
+        return patient.getRecentSymptomReports().stream()
+                .map(Mapper::mapToSymptomBriefDTO)
+                // Ordinamento: dal più recente (Oggi) al più vecchio
+                .sorted(Comparator.comparing(SymptomReportBriefDTO::getCreatedAt).reversed())
+                .collect(Collectors.toList());
     }
 }

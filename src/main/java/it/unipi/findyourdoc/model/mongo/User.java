@@ -17,11 +17,10 @@ public abstract class User {
 
     private String telephone;
 
-    @Field("password_hash")
     private String password;
 
     @CreatedDate
-    @Field("created_at")
+
     private LocalDateTime createdAt;
 }
 
