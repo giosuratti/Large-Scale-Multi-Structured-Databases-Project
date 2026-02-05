@@ -24,16 +24,40 @@ public interface DoctorGraphRepository extends Neo4jRepository<DoctorNode, Strin
             "       spec.name AS specialization, " +
             "       doc.city AS city, " + // <--- Mappa sul campo 'city' del DTO
             "       doc.phone AS phone " +
-            "       coalesce(doc.rating, 0.0) AS rating " +
+            "       coalesce(doc.avgRating, 0.0) AS avgRating " +
+            "       doc.ratingCount AS ratingCount" +
 
-            "ORDER BY rating DESC")
+            "ORDER BY avgRating DESC")
     List<SpecialistDTO> findSpecialistsByDiagnosisAndCity(
             @Param("city") String city,
             @Param("diagnosis") String diagnosis
     );
 
     @Query("UNWIND $updates AS row " +
-            "MATCH (d:Doctor {npi: row.id}) " + // Usa 'npi' o 'id' in base a come hai mappato la chiave primaria nel Node
-            "SET d.rating = row.rating")
+            "MATCH (d:Doctor {NPI: row.id}) " +
+            "SET d.avgRating = row.avgRating, " +
+            "d.ratingCount = row.ratingCount")
     void bulkUpdateRatings(@Param("updates") List<Map<String, Object>> updates);
+
+    @Query("MERGE (d:Doctor {id: $id}) " +
+            "SET d.firstName = $firstName, " +
+            "    d.lastName = $lastName, " +
+            "    d.city = $city, " +
+            "    d.gender = $gender, " +
+            "    d.avgRating = $avgRating, " +
+            "    d.ratingCount = $ratingCount, " +
+            "WITH d " +
+            "UNWIND $specialties AS specName " +
+            "MATCH (s:Specialization {name: specName}) " +
+            "MERGE (s)-[:HAS_DOCTOR]->(d)")
+    void createDoctorAndRelations(
+            @Param("id") String id,
+            @Param("firstName") String firstName,
+            @Param("lastName") String lastName,
+            @Param("gender") String gender,
+            @Param("city") String city,
+            @Param("specialties") List<String> specialties,
+            @Param("avgRating") Float avgRating,
+            @Param("ratingCount") Integer ratingCount
+    );
 }

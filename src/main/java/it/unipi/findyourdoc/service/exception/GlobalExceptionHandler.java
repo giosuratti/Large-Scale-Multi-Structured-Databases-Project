@@ -79,7 +79,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleAccessDeniedException(AccessDeniedException ex) {
         Map<String, String> response = new HashMap<>();
         response.put("error", "Access Denied");
-        response.put("details", "You don't have the required permissions for this operation.");
+        response.put("details", "You don't have the required permissions for this operation: " + ex.getMessage());
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
     }
 
@@ -101,7 +101,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleGenericException(Exception ex) {
         Map<String, String> response = new HashMap<>();
         response.put("error", "Internal Server Error");
-        response.put("details", "An unexpected error occurred: " + ex.getMessage());
+        response.put("details", ex.getMessage());
         // Loggare l'eccezione qui per debug interno
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }

@@ -132,32 +132,32 @@ public class AdminServiceImplementation implements AdminService {
 
 
     @Override
-    public void deleteUser(String id) {
+    public void deleteUser(String email) {
         boolean deleted = false;
 
         // 1. Attempt to find and delete if the ID belongs to a DOCTOR
-        if (doctorRepository.existsById(id)) {
-            doctorRepository.deleteById(id);
+        if (doctorRepository.existsByEmail(email)) {
+            doctorRepository.deleteByEmail(email);
             deleted = true;
             // Note: ideally, you should also implement a cascade delete here
             // to remove appointments associated with this doctor.
         }
 
         // 2. If not found yet, check if the ID belongs to a PATIENT
-        if (!deleted && patientRepository.existsById(id)) {
-            patientRepository.deleteById(id);
+        if (!deleted && patientRepository.existsByEmail(email)) {
+            patientRepository.deleteByEmail(email);
             deleted = true;
         }
 
         // 3. If not found yet, check if the ID belongs to an ADMIN
-        if (!deleted && adminRepository.existsById(id)) {
-            adminRepository.deleteById(id);
+        if (!deleted && adminRepository.existsByEmail(email)) {
+            adminRepository.deleteById(email);
             deleted = true;
         }
 
         // 4. If the ID was not found in any of the three collections
         if (!deleted) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User with ID " + id + " not found in any repository (Doctor, Patient, or Admin).");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User with ID " + email + " not found in any repository (Doctor, Patient, or Admin).");
         }
 
         // Log the action for security auditing
@@ -233,7 +233,7 @@ public class AdminServiceImplementation implements AdminService {
     }
 
     @Override
-    @Transactional
+    // @Transactional
     // REDIS: Tasto nucleare. Stiamo cambiando i criteri di ordinamento globali.
     // Dobbiamo invalidare TUTTE le ricerche salvate in cache, non solo una città specifica.
     @CacheEvict(value = {"specialist_search", "doctors_search_city"}, allEntries = true)
@@ -242,22 +242,24 @@ public class AdminServiceImplementation implements AdminService {
 
         // 1. Recuperiamo tutti i dottori da Mongo
         // Ottimizzazione: se hai tanti dati, usa una proiezione per prendere solo ID e Rating
-        List<Doctor> mongoDoctors = doctorRepository.findAll();
+        // Uso una proiezione
+        List<DoctorProjection> mongoDoctors = doctorRepository.findAllBy();
 
+        /*
         // 2. Prepariamo la lista per il Bulk Update di Neo4j
         List<Map<String, Object>> batchUpdates = new ArrayList<>();
 
-        for (Doctor doc : mongoDoctors) {
+        for (DoctorProjection doc : mongoDoctors) {
             Map<String, Object> updateEntry = new HashMap<>();
-            updateEntry.put("id", doc.getId()); // Assicurati che questo ID corrisponda all'NPI su Neo4j
-            updateEntry.put("rating", doc.getAvgRating());
+            updateEntry.put("id", doc.id()); // Assicurati che questo ID corrisponda all'NPI su Neo4j
+            updateEntry.put("rating", doc.avgRating());
             batchUpdates.add(updateEntry);
-        }
+        }*/
 
         // 3. Eseguiamo l'aggiornamento su Neo4j
-        if (!batchUpdates.isEmpty()) {
+        /*if (!batchUpdates.isEmpty()) {
             // Eseguiamo a blocchi di 500 per non intasare la memoria se hai 1 milione di dottori
-            int batchSize = 500;
+            int batchSize = 10000;
             for (int i = 0; i < batchUpdates.size(); i += batchSize) {
                 int end = Math.min(i + batchSize, batchUpdates.size());
                 List<Map<String, Object>> subList = batchUpdates.subList(i, end);
@@ -265,9 +267,44 @@ public class AdminServiceImplementation implements AdminService {
                 doctorGraphRepository.bulkUpdateRatings(subList);
                 log.info("Aggiornati {} dottori su Neo4j...", end);
             }
-        }
+        }*/
+
+
+        // 2. Trasformazione in Map (Operazione CPU-bound, ottima per i thread)
+        List<Map<String, Object>> allUpdates = mongoDoctors.parallelStream()
+                .map(doc -> {
+                    Map<String, Object> entry = new HashMap<>();
+                    entry.put("id", doc.id());
+                    entry.put("avgRating", doc.avgRating());
+                    entry.put("ratingCount", doc.ratingCount());
+                    return entry;
+                })
+                .toList();
+
+        // 3. Partizionamento e Invio a Neo4j
+        List<List<Map<String, Object>>> batches = partitionList(allUpdates, 500);
+
+        log.info("Invio di {} batch a Neo4j in parallelo...", batches.size());
+
+        batches.parallelStream().forEach(batch -> {
+            try {
+                doctorGraphRepository.bulkUpdateRatings(batch);
+            } catch (Exception e) {
+                log.error("Errore durante l'aggiornamento di un batch: {}", e.getMessage());
+                // Qui puoi decidere se continuare o fermare tutto
+            }
+        });
 
         log.info("Sincronizzazione completata con successo.");
+    }
+
+
+    public static <T> List<List<T>> partitionList(List<T> list, int pageSize) {
+        List<List<T>> partitions = new ArrayList<>();
+        for (int i = 0; i < list.size(); i += pageSize) {
+            partitions.add(list.subList(i, Math.min(i + pageSize, list.size())));
+        }
+        return partitions;
     }
 
 
@@ -350,7 +387,37 @@ public class AdminServiceImplementation implements AdminService {
             doctor.setLocation(Mapper.mapLocationDtoToEntity(createDTO.getLocation()));
         }
 
+        // --- 2. INIZIALIZZAZIONE CAMPI DI SISTEMA (Tutti a 0 o Vuoti) ---
+        // Inizializziamo a liste vuote [] invece di null per evitare NullPointerException
+        doctor.setAvailableSlots(new ArrayList<>());
+        doctor.setBookedThisWeek(new ArrayList<>());
+        doctor.setRatings(new ArrayList<>());
+
+        // Inizializziamo i contatori a zero
+        doctor.setAvgRating(0.0f);
+        doctor.setRatingCount(0);
+        doctor.setTotalAppointments(0);
+
         Doctor savedDoctor = doctorRepository.save(doctor);
+
+        try {
+            doctorGraphRepository.createDoctorAndRelations(
+                    savedDoctor.getId(),          // Usiamo l'ID generato da Mongo (o l'NPI se lo usi come ID)
+                    savedDoctor.getFirstName(),
+                    savedDoctor.getLastName(),
+                    savedDoctor.getGender(),
+                    savedDoctor.getLocation().getCity(),                         // Passiamo la città
+                    savedDoctor.getSpecialties(),
+                    savedDoctor.getAvgRating(),
+                    savedDoctor.getRatingCount()// Passiamo la lista delle specializzazioni
+            );
+        } catch (Exception e) {
+            // ROLLBACK MANUALE: Se Neo4j fallisce, cancelliamo il dottore da Mongo
+            // per evitare inconsistenze nei dati.
+            doctorRepository.deleteById(savedDoctor.getId());
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error creating graph node: " + e.getMessage());
+        }
+
         return Mapper.mapToReadDTO(savedDoctor);
     }
 

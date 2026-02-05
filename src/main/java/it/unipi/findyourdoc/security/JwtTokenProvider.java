@@ -17,15 +17,10 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 
-/**
- * Component responsible for JWT (JSON Web Token) lifecycle management.
- * * Adapted for FindYourDoc: handles Admin, Doctor, and Patient validation.
- */
 @Component
 @RequiredArgsConstructor
 public class JwtTokenProvider {
 
-    // Injecting specific repositories for each user type
     private final AdminRepository adminRepository;
     private final DoctorRepository doctorRepository;
     private final PatientRepository patientRepository;
@@ -48,8 +43,9 @@ public class JwtTokenProvider {
         Date validity = new Date(now.getTime() + validityInMilliseconds);
 
         return JWT.create()
-                .withClaim("role", role)
-                .withClaim("email", email)
+                .withSubject(email) // <--- CORREZIONE FONDAMENTALE: Imposta il Subject (Standard JWT)
+                .withClaim("role", role) // Qui salviamo "ADMIN", "DOCTOR", ecc.
+                // .withClaim("email", email) // Ridondante se usiamo Subject, ma puoi lasciarlo
                 .withIssuedAt(now)
                 .withExpiresAt(validity)
                 .sign(algorithm);
@@ -63,24 +59,21 @@ public class JwtTokenProvider {
         return null;
     }
 
-    /**
-     * Validates the token and checks the existence of the specific user type
-     * in its respective MongoDB collection.
-     */
     public boolean validateToken(String token) {
         try {
             DecodedJWT jwt = JWT.require(algorithm).build().verify(token);
 
-            String username = jwt.getSubject();
+            // Ora questo funzionerà perché abbiamo usato .withSubject() nella creazione
+            String email = jwt.getSubject();
             String role = jwt.getClaim("role").asString();
 
-            // Check existence based on the specific role
-            if (role == null) return false;
+            if (email == null || role == null) return false;
 
+            // Verifica che l'utente esista ancora nel DB (Opzionale ma sicuro)
             return switch (role.toUpperCase()) {
-                case "ADMIN" -> adminRepository.existsByEmail(username);
-                case "DOCTOR" -> doctorRepository.existsByEmail(username);
-                case "PATIENT" -> patientRepository.existsByEmail(username);
+                case "ADMIN" -> adminRepository.existsByEmail(email);
+                case "DOCTOR" -> doctorRepository.existsByEmail(email);
+                case "PATIENT" -> patientRepository.existsByEmail(email);
                 default -> false;
             };
 
@@ -92,22 +85,21 @@ public class JwtTokenProvider {
     public UsernamePasswordAuthenticationToken getAuthentication(String token) {
         DecodedJWT decodedJWT = JWT.require(algorithm).build().verify(token);
 
-        String email = decodedJWT.getClaim("email").asString();
+        // Prendo la mail dal Subject (standard)
+        String email = decodedJWT.getSubject();
         String role = decodedJWT.getClaim("role").asString();
 
+        // <--- QUI È DOVE RISOLVI IL PROBLEMA DEL "ROLE_"
+        // Spring Security vuole "ROLE_ADMIN", nel token c'è scritto "ADMIN".
+        // Lo aggiungiamo manualmente qui. PERFETTO.
         SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + role);
 
         return new UsernamePasswordAuthenticationToken(
                 email, null, Collections.singletonList(authority));
     }
 
-    public String getPatientEmailFromToken(String token) {
-        DecodedJWT decodedJWT = JWT.require(algorithm).build().verify(token);
-        return decodedJWT.getClaim("email").asString();
-    }
-
     public String getEmailFromToken(String token) {
         DecodedJWT decodedJWT = JWT.require(algorithm).build().verify(token);
-        return decodedJWT.getSubject();
+        return decodedJWT.getSubject(); // Ora ritorna la mail corretta
     }
 }

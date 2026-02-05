@@ -35,5 +35,5 @@ public class DoctorReadDTO extends UserDTO {
             example = "[5, 4, 5, 3, 4]",
             type = "array"
     )
-    private ArrayList<Integer> rating;
+    private ArrayList<Integer> ratings;
 }

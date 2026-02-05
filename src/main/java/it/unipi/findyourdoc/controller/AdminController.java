@@ -192,12 +192,12 @@ public class AdminController {
     }
 
 
-    @Operation(summary = "Delete a user by Id")
+    @Operation(summary = "Delete a user by email")
     @ApiResponses({
 
             @ApiResponse(
                     responseCode = "204",
-                    description = "Admin deleted successfully"
+                    description = "User deleted successfully"
             ),
 
             @ApiResponse(
@@ -212,14 +212,14 @@ public class AdminController {
 
             @ApiResponse(
                     responseCode = "404",
-                    description = "Admin not found"
+                    description = "User not found"
             )
     })
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteAdmin(
-            @Parameter(description = "The email of the admin to delete") @PathVariable String id) {
-        adminService.deleteUser(id);
+            @Parameter(description = "The email of the admin to delete") @RequestBody String email) {
+        adminService.deleteUser(email);
         return ResponseEntity.noContent().build();
     }
 

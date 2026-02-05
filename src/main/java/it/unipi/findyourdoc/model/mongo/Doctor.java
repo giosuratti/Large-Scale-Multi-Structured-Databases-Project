@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 @NoArgsConstructor
 @AllArgsConstructor
 @Document(collection = "doctors")
+@CompoundIndex(name = "idx_id_avgRating_ratingCount", def = "{'_id': 1, 'avgRating': 1, 'ratingCount': 1}")
 public class Doctor extends User {
 
     private String firstName;
@@ -25,7 +27,7 @@ public class Doctor extends User {
     private ArrayList<Integer> ratings;
 
     private Location location;
-    private float avgRating;
+    private Float avgRating;
     private Integer ratingCount;
     private Integer totalAppointments;
     private String gender;

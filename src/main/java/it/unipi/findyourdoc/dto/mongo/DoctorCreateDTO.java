@@ -2,6 +2,7 @@ package it.unipi.findyourdoc.dto.mongo;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -27,8 +28,10 @@ public class DoctorCreateDTO extends UserDTO {
     @Schema(description = "The doctor's last name", example = "Bianchi")
     private String lastName;
 
-    @NotBlank(message = "Specialization is required")
-    @Schema(description = "The medical area of expertise", example = "Cardiology")
+    // CORREZIONE 1: Usa @NotEmpty invece di @NotBlank per le liste
+    @NotEmpty(message = "Specialization is required")
+    // CORREZIONE 2: Scrivi l'example come un array JSON scappato "[\"Valore\"]"
+    @Schema(description = "The medical area of expertise", example = "[\"Cardiology\", \"Dermatology\"]")
     private ArrayList<String> specializations;
 
     @NotBlank(message = "Gender is required")
