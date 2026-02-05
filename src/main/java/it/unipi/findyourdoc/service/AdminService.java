@@ -20,5 +20,4 @@ public interface AdminService {
 
     DoctorReadDTO registerDoctor(DoctorCreateDTO createDTO);
 
-    void deleteAdmin(String email);
 }

@@ -15,6 +15,6 @@ public interface AdminRepository extends UserRepository<Admin>{
 
     List<Admin> findByEmailStartingWith(String prefix);
 
-    void deleteByEmail(String email);
+    //void deleteByEmail(String email);
 
 }

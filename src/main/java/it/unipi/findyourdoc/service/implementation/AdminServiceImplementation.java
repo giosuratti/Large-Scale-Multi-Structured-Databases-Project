@@ -117,13 +117,6 @@ public class AdminServiceImplementation implements AdminService {
                 .collect(Collectors.toList());
     }
 
-    @Override
-    public void deleteAdmin(String email) {
-        if (!adminRepository.existsByEmail(email)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin not found");
-        }
-        adminRepository.deleteByEmail(email);
-    }
 
     /**
      * Helper method to map Admin Entity to AdminReadDTO.
@@ -151,7 +144,7 @@ public class AdminServiceImplementation implements AdminService {
 
         // 3. If not found yet, check if the ID belongs to an ADMIN
         if (!deleted && adminRepository.existsByEmail(email)) {
-            adminRepository.deleteById(email);
+            adminRepository.deleteByEmail(email);
             deleted = true;
         }
 
