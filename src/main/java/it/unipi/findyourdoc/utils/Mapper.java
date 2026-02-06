@@ -27,9 +27,37 @@ public class Mapper {
             LocationDTO locDto = new LocationDTO();
             locDto.setCity(entity.getLocation().getCity());
             locDto.setAddress(entity.getLocation().getAddress());
-            // Aggiungi latitudine/longitudine se il frontend deve mostrare la mappa
+            locDto.setState(entity.getLocation().getState());
+            locDto.setZipCode(entity.getLocation().getZipCode());
             dto.setLocation(locDto);
         }
+
+
+        return dto;
+    }
+
+    // Nel file Mapper.java
+
+    public static AppointmentPatientDTO mapToPatientDTO(AppointmentPatient entity) {
+        if (entity == null) return null;
+
+        AppointmentPatientDTO dto = new AppointmentPatientDTO();// O source.getId() se hai corretto
+        dto.setDateTime(entity.getDateTime());
+        dto.setId(entity.getAppointmentId());
+        if (entity.getLocation() != null) {
+            LocationDTO locDto = new LocationDTO();
+            locDto.setCity(entity.getLocation().getCity());
+            locDto.setAddress(entity.getLocation().getAddress());
+            locDto.setState(entity.getLocation().getState());
+            locDto.setZipCode(entity.getLocation().getZipCode());
+            dto.setLocation(locDto);
+        } // Se hai un mapper per location
+        dto.setStatus(entity.getStatus());
+
+        // Campi specifici presenti nell'embedded del paziente
+        dto.setDoctorFirstName(entity.getDoctorFirstName());
+        dto.setDoctorLastName(entity.getDoctorLastName());
+        dto.setDoctorId(entity.getDoctorId());
 
         return dto;
     }
@@ -43,11 +71,19 @@ public class Mapper {
         return dto;
     }
 
-    public static SymptomReportBriefDTO mapToBriefDTO(SymptomReport report) {
+    public static SymptomReportBriefDTO mapToBriefDTO(SymptomReportBrief report) {
+        if (report == null) return null;
+
         SymptomReportBriefDTO dto = new SymptomReportBriefDTO();
+
+        // Copia i campi base
         dto.setCreatedAt(report.getCreatedAt());
-        // Se non ci sono diagnosi stimate, restituiamo "In attesa di valutazione" o simile
         dto.setPossibleDiagnosies(report.getPossibleDiagnosies());
+
+        // IMPORTANTE: Copia anche contesto e sintomi (altrimenti arrivano vuoti al frontend)
+        dto.setContext(report.getContext());
+        dto.setSymptoms(report.getSymptoms());
+
         return dto;
     }
 
@@ -55,8 +91,8 @@ public class Mapper {
         RatingDTO dto = new RatingDTO();
         dto.setDoctorNpi(rating.getDoctorNpi());
         dto.setRating(rating.getRating());
-        dto.setDoctorName(rating.getDoctorFirstName());       // Usa il setter corretto di Lombok
-        dto.setDoctorSurname(rating.getDoctorLastName()); // Usa il setter corretto di Lombok
+        dto.setDoctorFirstName(rating.getDoctorFirstName());       // Usa il setter corretto di Lombok
+        dto.setDoctorLastName(rating.getDoctorLastName()); // Usa il setter corretto di Lombok
         return dto;
     }
 
@@ -169,5 +205,18 @@ public class Mapper {
         docAppt.setPatientTelephone(full.getPatientTelephone());
 
         return docAppt;
+    }
+
+    public static RatingDTO mapToRatingDTO(Rating source) {
+        if (source == null) return null;
+
+        RatingDTO dto = new RatingDTO();
+        // Assicurati che i nomi dei campi corrispondano alla tua classe Rating
+        dto.setDoctorNpi(source.getDoctorNpi());
+        dto.setDoctorFirstName(source.getDoctorFirstName());
+        dto.setDoctorLastName(source.getDoctorLastName());
+        dto.setRating(source.getRating());
+
+        return dto;
     }
 }

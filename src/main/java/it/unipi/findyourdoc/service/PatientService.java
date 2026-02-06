@@ -2,6 +2,8 @@ package it.unipi.findyourdoc.service;
 
 import it.unipi.findyourdoc.dto.mongo.*;
 import it.unipi.findyourdoc.dto.neo4j.SpecialistDTO;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -41,15 +43,15 @@ public interface PatientService {
 
     void cancelAppointment(String id);
 
-    List<AppointmentPatientDTO> getAppointmentsByEmail(String email);
+    Page<AppointmentPatientDTO> getAppointmentsByEmail(String email, Pageable pageable);
 
-    List<SymptomReportBriefDTO> getSymptomReportsByEmail(String email);
+    Page<SymptomReportBriefDTO> getSymptomReportsByEmail(String email, Pageable pageable);
 
     SymptomReportBriefDTO createSymptomReportByEmail(String email, SymptomReportCreateDTO createDTO);
 
     RatingDTO addRatingByEmail (String email, RatingDTO ratingDTO);
 
-    List<RatingDTO> getAllRatingsByEmail(String email);
+    Page<RatingDTO> getAllRatingsByEmail(String email, Pageable pageable);
 
     List<SpecialistDTO> findSpecialistsByDiagnosisAndCity(String city, String diagnosis);
 

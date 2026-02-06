@@ -19,10 +19,10 @@ public class RatingDTO {
     private String doctorNpi;
 
     @Schema(description = "Full name of the doctor (optional in DTO)", example = "Mario")
-    private String doctorName;
+    private String doctorFirstName;
 
     @Schema(description = "Surname of the doctor (optional in DTO)", example = "Rossi")
-    private String doctorSurname;
+    private String doctorLastName;
 
     @Min(value = 1, message = "Rating must be at least 1")
     @Max(value = 5, message = "Rating cannot exceed 5")

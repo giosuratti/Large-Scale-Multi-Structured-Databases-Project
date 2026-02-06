@@ -10,6 +10,7 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 import org.springframework.data.mongodb.core.mapping.FieldType;
+import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -20,6 +21,8 @@ import java.util.ArrayList;
 @AllArgsConstructor
 @Document(collection = "appointments")
 public class AppointmentFull extends AppointmentBrief{
+    @MongoId(FieldType.OBJECT_ID) // Corretto per documento root
+    private String appointmentId;
     @Field(targetType = FieldType.OBJECT_ID)
     private String patientId;
     @Field(targetType = FieldType.OBJECT_ID)

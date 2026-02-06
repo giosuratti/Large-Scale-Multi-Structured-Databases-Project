@@ -19,6 +19,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,10 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static it.unipi.findyourdoc.utils.Mapper.mapLocationDtoToEntity;
@@ -250,18 +250,26 @@ public class PatientServiceImplementation implements PatientService {
     }
 
     @Override
-    @Cacheable(value = "patient_appointments", key = "#email")
-    public List<AppointmentPatientDTO> getAppointmentsByEmail(String email) {
-        // 1. Recupera ID Paziente (Fix: usiamo l'email per trovare l'ID)
+
+    public Page<AppointmentPatientDTO> getAppointmentsByEmail(String email, Pageable pageable) {
+        // Recuperiamo il documento paziente intero
         Patient patient = patientRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Patient not found"));
 
-        // 2. Query su Appointment Collection usando l'ID
-        List<AppointmentFull> appointments = appointmentRepository.findByPatientIdOrderByDateTimeDesc(patient.getId());
+        if (patient.getBookedAppointments() == null || patient.getBookedAppointments().isEmpty()) {
+            return Page.empty(pageable);
+        }
 
-        return appointments.stream()
+        // 1. Trasformazione in DTO e Ordinamento
+        List<AppointmentPatientDTO> allItems = patient.getBookedAppointments().stream()
+                .filter(a -> a != null && a.getDateTime() != null)
+                // Usiamo Comparator.reversed() per avere i più recenti in alto
+                .sorted(Comparator.comparing(AppointmentPatient::getDateTime).reversed())
                 .map(Mapper::mapToPatientDTO)
                 .collect(Collectors.toList());
+
+        // 2. Creiamo la Pagina
+        return createPageFromList(allItems, pageable);
     }
 
     // --- Helper Methods per Slot ---
@@ -341,19 +349,23 @@ public class PatientServiceImplementation implements PatientService {
     }
 
     @Override
-    @Cacheable(value = "patient_symptoms", key = "#email")
-    public List<SymptomReportBriefDTO> getSymptomReportsByEmail(String email) {
+    public Page<SymptomReportBriefDTO> getSymptomReportsByEmail(String email, Pageable pageable) {
         Patient patient = patientRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Patient not found"));
 
         if (patient.getRecentSymptomReports() == null || patient.getRecentSymptomReports().isEmpty()) {
-            return new ArrayList<>();
+            return Page.empty(pageable);
         }
 
-        return patient.getRecentSymptomReports().stream()
-                .map(Mapper::mapToSymptomBriefDTO)
-                .sorted(Comparator.comparing(SymptomReportBriefDTO::getCreatedAt).reversed())
+        List<SymptomReportBriefDTO> allItems = patient.getRecentSymptomReports().stream()
+                .filter(Objects::nonNull)
+                // 1. FIX: Usa la classe dell'ENTITÀ (SymptomReportBrief) per il confronto, non il DTO
+                .sorted(Comparator.comparing(SymptomReportBrief::getCreatedAt).reversed())
+                // 2. FIX: Aggiungi il mapping da Entità -> DTO
+                .map(Mapper::mapToBriefDTO)
                 .collect(Collectors.toList());
+
+        return createPageFromList(allItems, pageable);
     }
 
     // ===================================================================================
@@ -418,16 +430,21 @@ public class PatientServiceImplementation implements PatientService {
     }
 
     @Override
-    @Cacheable(value = "patient_ratings", key = "#email")
-    public List<RatingDTO> getAllRatingsByEmail(String email) {
+    public Page<RatingDTO> getAllRatingsByEmail(String email, Pageable pageable) {
         Patient patient = patientRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Patient not found"));
 
-        if (patient.getRatings() == null) return new ArrayList<>();
+        if (patient.getRatings() == null || patient.getRatings().isEmpty()) {
+            return Page.empty(pageable);
+        }
 
-        return patient.getRatings().stream()
-                .map(Mapper::mapToPatientRatingDTO)
+        // I rating solitamente non hanno data nell'embedded, se ce l'hanno ordina qui
+        List<RatingDTO> allItems = patient.getRatings().stream()
+                .filter(Objects::nonNull)
+                .map(Mapper::mapToRatingDTO)
                 .collect(Collectors.toList());
+
+        return createPageFromList(allItems, pageable);
     }
 
     // ===================================================================================
@@ -511,6 +528,20 @@ public class PatientServiceImplementation implements PatientService {
 
         // 2. Mapping Entity -> DTO completo
         return Mapper.mapToReadDTO(patient);
+    }
+
+    private <T> Page<T> createPageFromList(List<T> list, Pageable pageable) {
+        if (list == null) return Page.empty(pageable);
+
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), list.size());
+
+        if (start > list.size()) {
+            return new PageImpl<>(Collections.emptyList(), pageable, list.size());
+        }
+
+        List<T> pageContent = list.subList(start, end);
+        return new PageImpl<>(pageContent, pageable, list.size());
     }
 
 }

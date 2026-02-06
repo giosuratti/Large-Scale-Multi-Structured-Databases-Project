@@ -14,6 +14,10 @@ import it.unipi.findyourdoc.service.PatientService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -133,20 +137,28 @@ public class PatientController {
     })
     @GetMapping("/my-appointments")
     @PreAuthorize("hasRole('PATIENT')")
-    public ResponseEntity<List<AppointmentPatientDTO>> getMyAppointments(HttpServletRequest request) {
-        // Estraiamo l'email dal token per identificare il paziente
+    public ResponseEntity<Page<AppointmentPatientDTO>> getMyAppointments(
+            HttpServletRequest request,
+            @ParameterObject
+            @PageableDefault(size = 10, sort = "dateTime") Pageable pageable) { // <--- STILE ADMIN
+
         String token = jwtTokenProvider.resolveToken(request);
         String email = jwtTokenProvider.getEmailFromToken(token);
-
-        return ResponseEntity.ok(patientService.getAppointmentsByEmail(email));
+        return ResponseEntity.ok(patientService.getAppointmentsByEmail(email, pageable));
     }
 
-    @Operation(summary = "Get all symptom reports", description = "Retrieves all reports for the authenticated patient.")
+    @Operation(
+            summary = "Get all symptom reports (Paginated)",
+            description = "Retrieves paginated reports. Default: Sorted by createdAt DESC.")
     @GetMapping("/symptomreports")
     @PreAuthorize("hasRole('PATIENT')")
-    public ResponseEntity<List<SymptomReportBriefDTO>> getMySymptomReports(HttpServletRequest request) {
+    public ResponseEntity<Page<SymptomReportBriefDTO>> getMySymptomReports(
+            HttpServletRequest request,
+            @ParameterObject
+            @PageableDefault(size = 10, sort = "createdAt") Pageable pageable) {
+
         String email = jwtTokenProvider.getEmailFromToken(jwtTokenProvider.resolveToken(request));
-        return ResponseEntity.ok(patientService.getSymptomReportsByEmail(email));
+        return ResponseEntity.ok(patientService.getSymptomReportsByEmail(email, pageable));
     }
 
     @Operation(summary = "Create symptom report", description = "Creates a new report and calculates patient context (age/location).")
@@ -169,11 +181,17 @@ public class PatientController {
         return ResponseEntity.ok(patientService.addRatingByEmail(email, ratingDTO));
     }
 
-    @Operation(summary = "View all ratings", description = "Retrieves all ratings stored in the system.")
+    @Operation(
+            summary = "View all ratings (Paginated)",
+            description = "Retrieves all ratings. Default: size 20.")
     @GetMapping("/ratings")
-    public ResponseEntity<List<RatingDTO>> getAllRatings(HttpServletRequest request) {
+    public ResponseEntity<Page<RatingDTO>> getAllRatings(
+            HttpServletRequest request,
+            @ParameterObject
+            @PageableDefault(size = 20) Pageable pageable) {
+
         String email = jwtTokenProvider.getEmailFromToken(jwtTokenProvider.resolveToken(request));
-        return ResponseEntity.ok(patientService.getAllRatingsByEmail(email));
+        return ResponseEntity.ok(patientService.getAllRatingsByEmail(email, pageable));
     }
 
     @Operation(
