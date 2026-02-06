@@ -20,7 +20,7 @@ public class LoginRequestDTO {
     /** The email of the user attempting to log in. */
     @NotBlank(message = "Email is required")
     @Email(message = "Please provide a valid email address")
-    @Schema(description = "The unique email of the user.", example = "mario.rossi@example.com")
+    @Schema(description = "The unique email of the user.", example = "user.surname@example.com")
     private String email;
 
     /** The password associated with the user's account. */

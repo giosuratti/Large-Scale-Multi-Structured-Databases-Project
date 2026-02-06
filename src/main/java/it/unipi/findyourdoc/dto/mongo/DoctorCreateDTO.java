@@ -13,7 +13,11 @@ import java.util.ArrayList;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @Schema(description = "DTO for registering a new medical professional, including credentials and professional info")
-public class DoctorCreateDTO extends UserDTO {
+public class DoctorCreateDTO extends UserCreateDTO {
+
+    @NotBlank(message = "NPI (National Provider Identifier) is required")
+    @Schema(description = "Unique National Provider Identifier", example = "1234567890")
+    private String npi;
 
     @NotBlank(message = "Password is required")
     @Size(min = 8, message = "Password must be at least 8 characters long")

@@ -9,6 +9,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @Schema(description = "DTO representing an Admin, containing base user information.")
-public class AdminReadDTO extends UserDTO {
+public class AdminReadDTO extends UserReadDTO {
     // Non aggiungiamo nulla perché Admin nel Model non ha campi extra rispetto a User
 }

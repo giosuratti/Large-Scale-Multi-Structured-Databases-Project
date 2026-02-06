@@ -8,7 +8,7 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @Schema(description = "DTO for registering a new patient, including credentials and personal details")
-public class PatientCreateDTO extends UserDTO {
+public class PatientCreateDTO extends UserCreateDTO {
 
     @NotBlank(message = "Password is required")
     @Size(min = 8, message = "Password must be at least 8 characters long")

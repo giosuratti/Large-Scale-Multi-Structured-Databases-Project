@@ -53,7 +53,7 @@ public class Mapper {
 
     public static RatingDTO mapToPatientRatingDTO(Rating rating) {
         RatingDTO dto = new RatingDTO();
-        dto.setDoctorId(rating.getDoctorId());
+        dto.setDoctorNpi(rating.getDoctorNpi());
         dto.setRating(rating.getRating());
         dto.setDoctorName(rating.getDoctorFirstName());       // Usa il setter corretto di Lombok
         dto.setDoctorSurname(rating.getDoctorLastName()); // Usa il setter corretto di Lombok
@@ -65,7 +65,6 @@ public class Mapper {
         dto.setId(String.valueOf(p.getId()));
         dto.setEmail(p.getEmail());
         dto.setTelephone(p.getTelephone());
-        dto.setCreatedAt(p.getCreatedAt());
 
         dto.setFirstName(p.getFirstName());
         dto.setLastName(p.getLastName());
@@ -103,12 +102,12 @@ public class Mapper {
         dto.setId(String.valueOf(d.getId()));
         dto.setEmail(d.getEmail());
         dto.setTelephone(d.getTelephone());
-        dto.setCreatedAt(d.getCreatedAt());
 
         dto.setFirstName(d.getFirstName());
         dto.setLastName(d.getLastName());
         dto.setSpecializations(d.getSpecialties());
         dto.setGender(d.getGender());
+        dto.setNpi(d.getNpi());
 
         if (d.getLocation() != null) {
             dto.setLocation(new LocationDTO(
@@ -152,7 +151,6 @@ public class Mapper {
         dto.setId(String.valueOf(admin.getId()));
         dto.setEmail(admin.getEmail());
         dto.setTelephone(admin.getTelephone());
-        dto.setCreatedAt(admin.getCreatedAt());
         return dto;
     }
 

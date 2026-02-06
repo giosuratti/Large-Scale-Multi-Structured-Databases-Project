@@ -34,7 +34,7 @@ public interface DoctorGraphRepository extends Neo4jRepository<DoctorNode, Strin
     );
 
     @Query("UNWIND $updates AS row " +
-            "MATCH (d:Doctor {NPI: row.id}) " +
+            "MATCH (d:Doctor {NPI: row.npi}) " +
             "SET d.avgRating = row.avgRating, " +
             "d.ratingCount = row.ratingCount")
     void bulkUpdateRatings(@Param("updates") List<Map<String, Object>> updates);

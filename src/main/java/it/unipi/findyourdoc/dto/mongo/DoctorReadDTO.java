@@ -13,7 +13,10 @@ import java.util.ArrayList;
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @Schema(description = "DTO for reading doctor profile and professional information")
-public class DoctorReadDTO extends UserDTO {
+public class DoctorReadDTO extends UserReadDTO {
+
+    @Schema(description = "Unique National Provider Identifier", example = "1234567890")
+    private String npi;
 
     @Schema(description = "The doctor's first name", example = "Giulia")
     private String firstName;

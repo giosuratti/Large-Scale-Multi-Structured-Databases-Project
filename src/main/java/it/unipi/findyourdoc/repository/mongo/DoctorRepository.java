@@ -2,7 +2,6 @@ package it.unipi.findyourdoc.repository.mongo;
 
 import it.unipi.findyourdoc.dto.mongo.DoctorProjection;
 import it.unipi.findyourdoc.model.mongo.Doctor;
-import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -15,5 +14,7 @@ public interface DoctorRepository extends UserRepository<Doctor>{
     // boolean existsByEmail(String email);
     // void deleteByEmail(String email);
     List<DoctorProjection> findAllBy();
+    boolean existsByNpi(String npi);
+    Optional<Doctor> findByNpi(String npi);
     // Optional<Doctor> findByEmail(String email);
 }

@@ -28,16 +28,14 @@ public interface PatientService {
      * <p>Allows updating the email, username, password, and full name. Performs necessary validation
      * to ensure uniqueness of email and username.
      *
-     * @param id The unique identifier of the user to update.
+     * @param email The unique identifier of the user to update.
      * @param updateDTO The DTO containing the fields to update.
      * @return The updated user details.
      * @throws IllegalArgumentException If the new email or username is already taken.
      */
-    PatientReadDTO updatePatient(String id, PatientUpdateDTO updateDTO);
+    PatientReadDTO updatePatient(String email, PatientUpdateDTO updateDTO);
 
-    PatientReadDTO getUserByEmail(String email);
-
-    PatientReadDTO getUserById(String id);
+    PatientReadDTO getPatientByEmail(String email);
 
     AppointmentPatientDTO bookAppointmentByEmail(String id, AppointmentDTO appointmentDTO);
 
@@ -54,5 +52,6 @@ public interface PatientService {
     List<RatingDTO> getAllRatingsByEmail(String email);
 
     List<SpecialistDTO> findSpecialistsByDiagnosisAndCity(String city, String diagnosis);
+
 
 }

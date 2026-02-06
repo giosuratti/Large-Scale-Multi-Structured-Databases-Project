@@ -12,7 +12,7 @@ import java.util.List;
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true) // Importante perché estende UserDTO
 @Schema(description = "DTO for reading patient profile information")
-public class PatientReadDTO extends UserDTO {
+public class PatientReadDTO extends UserReadDTO {
 
     @Schema(description = "The user's first name.", example = "Mario")
     private String firstName;

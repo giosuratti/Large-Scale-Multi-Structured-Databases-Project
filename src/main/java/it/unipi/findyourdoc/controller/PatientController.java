@@ -18,36 +18,34 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * REST controller for managing Registered Users.
+ * REST controller for managing Registered Patients.
  *
  * <p>Provides endpoints for registration, profile updates, retrieval, deletion, search, and
  * bookmark management.
  */
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/api/patients")
 @RequiredArgsConstructor
 @Tag(
-        name = "User Management",
+        name = "Patient Management",
         description =
-                "Operations related to registered users, including authentication context and search.")
+                "Operations related to registered patients, including authentication context and search.")
 public class PatientController {
 
     private final PatientService patientService;
     private final JwtTokenProvider jwtTokenProvider;
 
     @Operation(
-            summary = "Register a new User",
-            description = "Creates a new user account with the provided details.")
+            summary = "Register a new Patient",
+            description = "Creates a new patient account with the provided details.")
     @ApiResponses(
             value = {
                     @ApiResponse(
                             responseCode = "200",
-                            description = "User registered successfully",
+                            description = "Patient registered successfully",
                             content = @Content(schema = @Schema(implementation = PatientCreateDTO.class))),
                     @ApiResponse(
                             responseCode = "400",
@@ -60,40 +58,44 @@ public class PatientController {
     }
 
     @Operation(
-            summary = "Update User Profile",
+            summary = "Update Patient Profile",
             description =
-                    "Updates email, full name or password. Requires 'USER' or 'ADMIN' role.")
+                    "Updates email, full name or password. Requires 'PATIENT'")
     @ApiResponses(
             value = {
-                    @ApiResponse(responseCode = "200", description = "User updated successfully"),
-                    @ApiResponse(responseCode = "404", description = "User not found"),
+                    @ApiResponse(responseCode = "200", description = "Patient updated successfully"),
+                    @ApiResponse(responseCode = "404", description = "Patient not found"),
                     @ApiResponse(responseCode = "400", description = "Duplicate email or invalid data")
             })
-    @PutMapping("/{id}")
+    @PutMapping("/me")
     @PreAuthorize("hasRole('PATIENT')")
-    public ResponseEntity<PatientReadDTO> updatePatient(
-            @Parameter(description = "ID of the patient to update") @PathVariable String id,
+    public ResponseEntity<PatientReadDTO> updatePatient(HttpServletRequest request,
             @RequestBody PatientUpdateDTO updateDTO) {
-        return ResponseEntity.ok(patientService.updatePatient(id, updateDTO));
+        String token = jwtTokenProvider.resolveToken(request);
+        String email = jwtTokenProvider.getEmailFromToken(token);
+        return ResponseEntity.ok(patientService.updatePatient(email, updateDTO));
     }
 
 
     @Operation(
-            summary = "Get Current Patient Info",
-            description =
-                    "Extracts email directly from the JWT Token without querying the database.")
+            summary = "Get Current Patient Profile",
+            description = "Retrieves the full profile of the currently logged-in patient using the JWT token."
+    )
     @GetMapping("/me")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Map<String, String>> getCurrentPatientInfo(HttpServletRequest request) {
-        String token = jwtTokenProvider.resolveToken(request);
+    @PreAuthorize("hasRole('PATIENT')") // Assicuriamoci che sia un paziente
+    public ResponseEntity<PatientReadDTO> getCurrentPatientProfile(HttpServletRequest request) {
 
-        // Extract info from token
+        // 1. Estrazione Email dal Token (Identity)
+        String token = jwtTokenProvider.resolveToken(request);
         String email = jwtTokenProvider.getEmailFromToken(token);
 
-        Map<String, String> patientInfo = new HashMap<>();
-        patientInfo.put("email", email);
+        // 2. Recupero Dati Completi dal Service (Data Fetching)
+        // Questo metodo (getUserByEmail) interroga MongoDB, mappa l'Entity in DTO
+        // e restituisce tutti i campi definiti nel tuo PatientReadDTO.
+        PatientReadDTO patientProfile = patientService.getPatientByEmail(email);
 
-        return ResponseEntity.ok(patientInfo);
+        // 3. Ritorno al Client
+        return ResponseEntity.ok(patientProfile);
     }
 
 

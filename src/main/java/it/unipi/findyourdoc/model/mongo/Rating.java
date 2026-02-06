@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Rating {
-    private String doctorId;
+    private String doctorNpi;
     private String doctorFirstName;
     private String doctorLastName;
     private int rating;

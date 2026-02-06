@@ -14,9 +14,9 @@ import lombok.NoArgsConstructor;
 @Schema(description = "DTO representing a rating given by a patient to a doctor")
 public class RatingDTO {
 
-    @NotBlank(message = "Doctor ID is required")
-    @Schema(description = "The unique ID of the rated doctor", example = "60d5ecb8b39d1c2b4c8e9f1a")
-    private String doctorId;
+    @NotBlank(message = "Doctor NPI is required")
+    @Schema(description = "The unique NPI of the rated doctor", example = "60d5ecb8b39d1c2b4c8e9f1a")
+    private String doctorNpi;
 
     @Schema(description = "Full name of the doctor (optional in DTO)", example = "Mario")
     private String doctorName;
