@@ -28,9 +28,11 @@ public class AppointmentFull extends AppointmentBrief{
     @Field(targetType = FieldType.OBJECT_ID)
     @Indexed
     private String doctorId;
+    private String doctorNpi;
     private String patientFirstName;
     private String patientLastName;
     private String patientTelephone;
+    private String patientEmail;
     private ArrayList<String> specialties;
     private Double doctorRating;
 

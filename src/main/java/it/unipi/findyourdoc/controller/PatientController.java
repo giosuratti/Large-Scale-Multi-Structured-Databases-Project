@@ -108,10 +108,10 @@ public class PatientController {
             description = "Let a patient book a visit.")
     @PostMapping("/book")
     @PreAuthorize("hasRole('PATIENT')")
-    public ResponseEntity<AppointmentPatientDTO> bookAppointmentById(HttpServletRequest request, @RequestBody AppointmentFullDTO appointmentFullDTO) {
+    public ResponseEntity<AppointmentPatientDTO> bookAppointmentById(HttpServletRequest request, @RequestBody AppointmentBookDTO appointmentBookDTO) {
         String token = jwtTokenProvider.resolveToken(request);
         String email = jwtTokenProvider.getEmailFromToken(token);
-        return ResponseEntity.ok(patientService.bookAppointmentByEmail(email, appointmentFullDTO));
+        return ResponseEntity.ok(patientService.bookAppointmentByEmail(email, appointmentBookDTO));
     }
 
     @Operation(

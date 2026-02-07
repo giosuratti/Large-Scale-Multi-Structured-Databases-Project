@@ -15,6 +15,6 @@ import java.util.ArrayList;
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @Schema(description = "DTO for reading doctor profile, professional information and available slots")
-public class DoctorReadSlotsDTO extends DoctorReadDTO{
+public class DoctorReadSlotsDTO extends DoctorReadDTOBase {
     ArrayList<LocalDateTime> availableSlots;
 }

@@ -39,7 +39,7 @@ public interface PatientService {
 
     PatientReadDTO getPatientByEmail(String email);
 
-    AppointmentPatientDTO bookAppointmentByEmail(String id, AppointmentFullDTO appointmentFullDTO);
+    AppointmentPatientDTO bookAppointmentByEmail(String id, AppointmentBookDTO appointmentBookDTO);
 
     void cancelAppointment(String id);
 

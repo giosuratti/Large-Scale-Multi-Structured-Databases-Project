@@ -25,6 +25,9 @@ public class AppointmentFullDTO {
     @Schema(description = "ID del medico (utile per link al profilo)", example = "501")
     private String doctorId; // Mettere NPI
 
+    @Schema(description = "Npi del medico (utile per link al profilo)", example = "501")
+    private String doctorNpi; // Mettere NPI
+
     @Schema(description = "Date and time of the appointment", example = "2026-05-15T10:30:00")
     private LocalDateTime DateTime;
 
@@ -39,6 +42,8 @@ public class AppointmentFullDTO {
     private String patientLastName;
 
     // Email
+    @Schema(description = "Email of the patient", example = "name.surname@example.com")
+    private String patientEmail;
 
     @Schema(description = "Contact telephone of the patient", example = "3331234567")
     private String patientTelephone;

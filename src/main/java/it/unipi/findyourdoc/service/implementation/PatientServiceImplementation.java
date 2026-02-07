@@ -23,6 +23,10 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -31,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -40,6 +45,9 @@ import static it.unipi.findyourdoc.utils.Mapper.mapToReadDTO;
 @Service
 @RequiredArgsConstructor
 public class PatientServiceImplementation implements PatientService {
+
+    @Autowired
+    private MongoTemplate mongoTemplate;
 
     private final PatientRepository patientRepository;
     private final PasswordEncoder passwordEncoder;
@@ -68,21 +76,22 @@ public class PatientServiceImplementation implements PatientService {
     @Transactional
     // Quando prenoto, invalido la cache "personale" degli appuntamenti del paziente
     @CacheEvict(value = "patient_appointments", key = "#patientEmail")
-    public AppointmentPatientDTO bookAppointmentByEmail(String patientEmail, AppointmentFullDTO appointmentFullDTO) {
+    public AppointmentPatientDTO bookAppointmentByEmail(String patientEmail, AppointmentBookDTO appointmentBookDTO) {
 
         // 1. Recupero Paziente
         Patient patient = patientRepository.findByEmail(patientEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Paziente non trovato"));
 
         // 2. Recupero Dottore
-        Doctor doctor = doctorRepository.findById(appointmentFullDTO.getDoctorId())
+        Doctor doctor = doctorRepository.findById(appointmentBookDTO.getDoctorId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Dottore non trovato"));
 
+        LocalDateTime localDateTime = appointmentBookDTO.getDateTime().toLocalDateTime();
         // 3. --- REDIS LOCK ---
         // Tentiamo di acquisire il lock per evitare race conditions (doppie prenotazioni)
         boolean locked = redisSlotService.acquireSlotLock(
                 doctor.getId(),
-                appointmentFullDTO.getDateTime(),
+                localDateTime,
                 patient.getId()
         );
 
@@ -95,7 +104,7 @@ public class PatientServiceImplementation implements PatientService {
             // 4. Controllo di sicurezza su MongoDB (Double check)
             boolean alreadyBooked = appointmentRepository.existsByDoctorIdAndDateTime(
                     doctor.getId(),
-                    appointmentFullDTO.getDateTime()
+                    localDateTime
             );
 
             if (alreadyBooked) {
@@ -105,6 +114,7 @@ public class PatientServiceImplementation implements PatientService {
             // 5. Creazione Appuntamento
             AppointmentFull appointment = new AppointmentFull();
             appointment.setDoctorId(doctor.getId());
+            appointment.setDoctorNpi(doctor.getNpi());
             appointment.setSpecialties(doctor.getSpecialties());
             appointment.setDoctorRating(doctor.getAvgRating()); // Snapshot rating attuale
 
@@ -114,8 +124,9 @@ public class PatientServiceImplementation implements PatientService {
             appointment.setPatientAge(patient.getAge());
             appointment.setPatientGender(patient.getGender());
             appointment.setPatientTelephone(patient.getTelephone());
+            appointment.setLocation(doctor.getLocation());
 
-            appointment.setDateTime(appointmentFullDTO.getDateTime());
+            appointment.setDateTime(localDateTime);
             appointment.setCreatedAt(LocalDateTime.now());
             appointment.setStatus(AppointmentStatus.SCHEDULED);
 
@@ -123,7 +134,7 @@ public class PatientServiceImplementation implements PatientService {
             appointmentRepository.save(appointment);
 
             // 7. RIMOZIONE SLOT DAL DOTTORE (MongoDB)
-            removeSlotFromDoctorAvailability(doctor, appointmentFullDTO.getDateTime());
+            removeSlotFromDoctorAvailability(doctor, localDateTime);
 
             // 8. 🔥 REDIS: Invalida cache slot pubblici del dottore
             redisTemplate.delete(DOCTOR_SLOTS_CACHE_PREFIX + doctor.getId());
@@ -132,11 +143,11 @@ public class PatientServiceImplementation implements PatientService {
             // (Il dottore deve vedere che ha un nuovo appuntamento nella sua dashboard)
             doctorService.invalidateDoctorCache(doctor.getEmail());
 
-            return Mapper.mapToPatientDTO(appointment);
+            return Mapper.mapToPatientDTO(appointment, doctor.getFirstName(), doctor.getLastName());
 
         } catch (Exception e) {
             // Se fallisce, rilasciamo il lock subito
-            redisSlotService.releaseSlotLock(doctor.getId(), appointmentFullDTO.getDateTime());
+            redisSlotService.releaseSlotLock(doctor.getId(), localDateTime);
             throw e;
         }
         // In caso di successo, il lock scadrà da solo (TTL) o verrà sovrascritto dalla persistenza DB
@@ -275,12 +286,27 @@ public class PatientServiceImplementation implements PatientService {
 
     // --- Helper Methods per Slot ---
 
+    // Assicurati di averlo iniettato
+
     private void removeSlotFromDoctorAvailability(Doctor doctor, LocalDateTime slotTime) {
-        if (doctor.getAvailableSlots() != null) {
-            boolean removed = doctor.getAvailableSlots().removeIf(slot -> slot.equals(slotTime));
-            if (removed) {
-                doctorRepository.save(doctor);
-            }
+        Query query = Query.query(Criteria.where("_id").is(doctor.getId()));
+
+        // TRUCCO: Convertiamo il LocalDateTime in Date forzando la zona UTC.
+        // In questo modo 10:00 diventa 10:00 UTC (e non 09:00 UTC)
+        Date dateForMongo = Date.from(slotTime.toInstant(ZoneOffset.UTC));
+
+        // Log di debug per essere sicuri
+        System.out.println("🔧 FIX TIMEZONE: Cerco di rimuovere slot: " + dateForMongo);
+
+        Update update = new Update().pull("availableSlots", dateForMongo);
+
+        // Eseguiamo l'update
+        var result = mongoTemplate.updateFirst(query, update, Doctor.class);
+
+        if (result.getModifiedCount() > 0) {
+            System.out.println("✅ Slot rimosso correttamente!");
+        } else {
+            System.err.println("❌ Slot NON rimosso. Verifica ancora la data nel DB.");
         }
     }
 
