@@ -18,7 +18,8 @@ public class DoctorNode {
     private String city;
     private String phone;
 
-    private Double averageRating;
+    private Double avgRating;
+    private Integer ratingCount;
 
     // Mappiamo la relazione inversa per comodità.
     // Su Neo4j: (Spec)-[:HAS_DOCTOR]->(Doc)

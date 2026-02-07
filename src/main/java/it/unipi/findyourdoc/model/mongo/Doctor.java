@@ -29,7 +29,7 @@ public class Doctor extends User {
     private ArrayList<Integer> ratings;
 
     private Location location;
-    private Float avgRating;
+    private Double avgRating;
     private Integer ratingCount;
     private Integer totalAppointments;
     private String gender;

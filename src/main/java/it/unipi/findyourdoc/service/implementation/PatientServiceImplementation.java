@@ -3,6 +3,7 @@ package it.unipi.findyourdoc.service.implementation;
 import it.unipi.findyourdoc.dto.mongo.*;
 import it.unipi.findyourdoc.dto.neo4j.SpecialistDTO;
 import it.unipi.findyourdoc.model.mongo.*;
+import it.unipi.findyourdoc.model.mongo.enums.AppointmentStatus;
 import it.unipi.findyourdoc.repository.mongo.AppointmentRepository;
 import it.unipi.findyourdoc.repository.mongo.DoctorRepository;
 import it.unipi.findyourdoc.repository.mongo.PatientRepository;
@@ -67,21 +68,21 @@ public class PatientServiceImplementation implements PatientService {
     @Transactional
     // Quando prenoto, invalido la cache "personale" degli appuntamenti del paziente
     @CacheEvict(value = "patient_appointments", key = "#patientEmail")
-    public AppointmentPatientDTO bookAppointmentByEmail(String patientEmail, AppointmentDTO appointmentDTO) {
+    public AppointmentPatientDTO bookAppointmentByEmail(String patientEmail, AppointmentFullDTO appointmentFullDTO) {
 
         // 1. Recupero Paziente
         Patient patient = patientRepository.findByEmail(patientEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Paziente non trovato"));
 
         // 2. Recupero Dottore
-        Doctor doctor = doctorRepository.findById(appointmentDTO.getDoctorId())
+        Doctor doctor = doctorRepository.findById(appointmentFullDTO.getDoctorId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Dottore non trovato"));
 
         // 3. --- REDIS LOCK ---
         // Tentiamo di acquisire il lock per evitare race conditions (doppie prenotazioni)
         boolean locked = redisSlotService.acquireSlotLock(
                 doctor.getId(),
-                appointmentDTO.getDateTime(),
+                appointmentFullDTO.getDateTime(),
                 patient.getId()
         );
 
@@ -94,7 +95,7 @@ public class PatientServiceImplementation implements PatientService {
             // 4. Controllo di sicurezza su MongoDB (Double check)
             boolean alreadyBooked = appointmentRepository.existsByDoctorIdAndDateTime(
                     doctor.getId(),
-                    appointmentDTO.getDateTime()
+                    appointmentFullDTO.getDateTime()
             );
 
             if (alreadyBooked) {
@@ -114,7 +115,7 @@ public class PatientServiceImplementation implements PatientService {
             appointment.setPatientGender(patient.getGender());
             appointment.setPatientTelephone(patient.getTelephone());
 
-            appointment.setDateTime(appointmentDTO.getDateTime());
+            appointment.setDateTime(appointmentFullDTO.getDateTime());
             appointment.setCreatedAt(LocalDateTime.now());
             appointment.setStatus(AppointmentStatus.SCHEDULED);
 
@@ -122,7 +123,7 @@ public class PatientServiceImplementation implements PatientService {
             appointmentRepository.save(appointment);
 
             // 7. RIMOZIONE SLOT DAL DOTTORE (MongoDB)
-            removeSlotFromDoctorAvailability(doctor, appointmentDTO.getDateTime());
+            removeSlotFromDoctorAvailability(doctor, appointmentFullDTO.getDateTime());
 
             // 8. 🔥 REDIS: Invalida cache slot pubblici del dottore
             redisTemplate.delete(DOCTOR_SLOTS_CACHE_PREFIX + doctor.getId());
@@ -135,7 +136,7 @@ public class PatientServiceImplementation implements PatientService {
 
         } catch (Exception e) {
             // Se fallisce, rilasciamo il lock subito
-            redisSlotService.releaseSlotLock(doctor.getId(), appointmentDTO.getDateTime());
+            redisSlotService.releaseSlotLock(doctor.getId(), appointmentFullDTO.getDateTime());
             throw e;
         }
         // In caso di successo, il lock scadrà da solo (TTL) o verrà sovrascritto dalla persistenza DB
@@ -145,11 +146,11 @@ public class PatientServiceImplementation implements PatientService {
     @Transactional
     public void cancelAppointment(String appointmentId) {
         // 1. Recupero Appuntamento
-        AppointmentFull appointment = appointmentRepository.findById(appointmentId)
+        AppointmentFullSummary appointment = appointmentRepository.findSummaryById(appointmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Appointment not found"));
 
         // Check Stato
-        AppointmentStatus currentStatus = appointment.getStatus();
+        AppointmentStatus currentStatus = appointment.status();
         if (currentStatus != AppointmentStatus.SCHEDULED &&
                 currentStatus != AppointmentStatus.PENDING &&
                 currentStatus != AppointmentStatus.RESCHEDULED &&
@@ -160,19 +161,19 @@ public class PatientServiceImplementation implements PatientService {
 
         // 2. Redis Lock
         boolean locked = redisSlotService.acquireSlotLock(
-                appointment.getDoctorId(),
-                appointment.getDateTime(),
+                appointment.doctorId(),
+                appointment.dateTime(),
                 "SYSTEM_CANCEL_" + appointmentId
         );
 
         if (!locked) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Slot currently being used.");
         }
-
+        
         try {
+
+            appointmentRepository.updateStatus(appointment.appointmentId(), AppointmentStatus.CANCELLED);
             // 3. UPDATE COLLECTION 'APPOINTMENTS' (Master Data)
-            appointment.setStatus(AppointmentStatus.CANCELLED);
-            appointmentRepository.save(appointment);
 
             // 4. UPDATE COLLECTION 'DOCTORS' -> Restore Slot
             restoreSlotToDoctor(appointment);
@@ -184,36 +185,36 @@ public class PatientServiceImplementation implements PatientService {
             updateDoctorBookedThisWeek(appointment);
 
             // 7. REDIS: Invalida Slot
-            redisTemplate.delete(DOCTOR_SLOTS_CACHE_PREFIX + appointment.getDoctorId());
+            redisTemplate.delete(DOCTOR_SLOTS_CACHE_PREFIX + appointment.doctorId());
 
             // 8. REDIS: Invalida Cache Profilo Dottore (dove c'è bookedThisWeek)
-            Doctor doctor = doctorRepository.findById(appointment.getDoctorId()).orElse(null);
+            Doctor doctor = doctorRepository.findById(appointment.doctorId()).orElse(null);
             if (doctor != null) {
                 doctorService.invalidateDoctorCache(doctor.getEmail());
             }
 
             // 9. REDIS: Invalida Cache Paziente
-            Patient patient = patientRepository.findById(appointment.getPatientId()).orElse(null);
+            Patient patient = patientRepository.findById(appointment.patientId()).orElse(null);
             if (patient != null) {
                 redisTemplate.delete("patient_appointments::" + patient.getEmail());
             }
 
         } catch (Exception e) {
-            redisSlotService.releaseSlotLock(appointment.getDoctorId(), appointment.getDateTime());
+            redisSlotService.releaseSlotLock(appointment.doctorId(), appointment.dateTime());
             throw e;
         }
 
-        redisSlotService.releaseSlotLock(appointment.getDoctorId(), appointment.getDateTime());
+        redisSlotService.releaseSlotLock(appointment.doctorId(), appointment.dateTime());
     }
 
     // --- Helper 1: Aggiorna lista Paziente ---
-    private void updatePatientEmbeddedList(AppointmentFull appointment) {
-        patientRepository.findById(appointment.getPatientId()).ifPresent(patient -> {
+    private void updatePatientEmbeddedList(AppointmentFullSummary appointment) {
+        patientRepository.findById(appointment.patientId()).ifPresent(patient -> {
             if (patient.getBookedAppointments() != null) {
                 boolean updated = false;
                 for (var embeddedAppt : patient.getBookedAppointments()) {
                     // Confrontiamo gli ID (Assicurati che embeddedAppt abbia appointmentId)
-                    if (embeddedAppt.getAppointmentId().equals(appointment.getAppointmentId())) {
+                    if (embeddedAppt.getAppointmentId().equals(appointment.appointmentId())) {
                         embeddedAppt.setStatus(AppointmentStatus.CANCELLED);
                         updated = true;
                         break;
@@ -225,15 +226,15 @@ public class PatientServiceImplementation implements PatientService {
     }
 
     // --- Helper 2: Aggiorna lista Dottore (bookedThisWeek) ---
-    private void updateDoctorBookedThisWeek(AppointmentFull appointment) {
-        doctorRepository.findById(appointment.getDoctorId()).ifPresent(doctor -> {
+    private void updateDoctorBookedThisWeek(AppointmentFullSummary appointment) {
+        doctorRepository.findById(appointment.doctorId()).ifPresent(doctor -> {
             // Controlliamo se la lista esiste e non è vuota
             if (doctor.getBookedThisWeek() != null && !doctor.getBookedThisWeek().isEmpty()) {
                 boolean updated = false;
 
                 for (var embeddedAppt : doctor.getBookedThisWeek()) {
                     // Cerchiamo l'appuntamento tramite ID
-                    if (embeddedAppt.getAppointmentId().equals(appointment.getAppointmentId())) {
+                    if (embeddedAppt.getAppointmentId().equals(appointment.appointmentId())) {
                         embeddedAppt.setStatus(AppointmentStatus.CANCELLED);
                         updated = true;
                         break; // Trovato, usciamo dal ciclo
@@ -283,11 +284,11 @@ public class PatientServiceImplementation implements PatientService {
         }
     }
 
-    private void restoreSlotToDoctor(AppointmentFull appointment) {
-        Doctor doctor = doctorRepository.findById(appointment.getDoctorId())
+    private void restoreSlotToDoctor(AppointmentFullSummary appointment) {
+        Doctor doctor = doctorRepository.findById(appointment.doctorId())
                 .orElseThrow(() -> new RuntimeException("Doctor not found to restore the slot"));
 
-        LocalDateTime slotRestored = appointment.getDateTime();
+        LocalDateTime slotRestored = appointment.dateTime();
 
         if (doctor.getAvailableSlots() == null) {
             doctor.setAvailableSlots(new ArrayList<>());
@@ -388,13 +389,14 @@ public class PatientServiceImplementation implements PatientService {
         if (patient.getRatings() == null) {
             patient.setRatings(new ArrayList<>());
         }
-        boolean alreadyRated = patient.getRatings().stream()
-                .anyMatch(r -> r.getDoctorNpi().equals(doctor.getNpi()));
+        else {
+            boolean alreadyRated = patient.getRatings().stream()
+                    .anyMatch(r -> r.getDoctorNpi().equals(doctor.getNpi()));
 
-        if (alreadyRated) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "You've already rated this doctor.");
+            if (alreadyRated) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "You've already rated this doctor.");
+            }
         }
-
         // 2. Crea Rating
         Rating newRating = new Rating();
         newRating.setDoctorNpi(doctor.getNpi());
@@ -415,7 +417,7 @@ public class PatientServiceImplementation implements PatientService {
         ratings.add(ratingDTO.getRating());
 
         // Arrotondamento 1 decimale
-        float roundedAverage = (float) (Math.round(newAverage * 10.0) / 10.0);
+        double roundedAverage = (double) (Math.round(newAverage * 10.0) / 10.0);
 
         doctor.setAvgRating(roundedAverage);
         doctor.setRatingCount(newTotalRatings);
@@ -454,7 +456,7 @@ public class PatientServiceImplementation implements PatientService {
     @Override
     @Cacheable(value = "specialist_search", key = "{#city, #diagnosis}")
     public List<SpecialistDTO> findSpecialistsByDiagnosisAndCity(String city, String diagnosis) {
-        log.info("Neo4j Query - City: {}, Diagnosy: {}", city, diagnosis);
+        log.info("Neo4j Query - City: {}, Diagnosys: {}", city, diagnosis);
         return doctorGraphRepository.findSpecialistsByDiagnosisAndCity(city, diagnosis);
     }
 
@@ -528,6 +530,31 @@ public class PatientServiceImplementation implements PatientService {
 
         // 2. Mapping Entity -> DTO completo
         return Mapper.mapToReadDTO(patient);
+    }
+
+    @Override
+    public DoctorReadSlotsDTO getDoctorByNpi(String npi) {
+        // 1. Recupera il documento da MongoDB
+        Doctor doctor = doctorRepository.findByNpi(npi)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Doctor not found"));
+
+        // 2. Logica di Business sugli Slot
+        // Se il dottore ha slot, vogliamo mostrare solo quelli FUTURI e ORDINATI
+        if (doctor.getAvailableSlots() != null) {
+            List<LocalDateTime> sortedFutureSlots = doctor.getAvailableSlots().stream()
+                    // Filtra via gli slot già passati (es. stamattina o ieri)
+                    .filter(slot -> slot.isAfter(LocalDateTime.now()))
+                    // Ordina dal più vicino al più lontano
+                    .sorted()
+                    // Raccoglie tutto in una List
+                    .collect(Collectors.toList());
+
+            // Aggiorniamo la lista temporanea dell'oggetto (senza salvare su DB, solo per il DTO)
+            doctor.setAvailableSlots(new ArrayList<>(sortedFutureSlots));
+        }
+
+        // 3. Mappa in DTO
+        return Mapper.mapToReadSlotsDTO(doctor);
     }
 
     private <T> Page<T> createPageFromList(List<T> list, Pageable pageable) {

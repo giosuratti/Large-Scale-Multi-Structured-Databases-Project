@@ -88,7 +88,7 @@ public class DoctorServiceImplementation implements DoctorService {
     @Override
     // CACHE: Usiamo l'email come chiave
     @Cacheable(value = "doctor_appointments", key = "#email")
-    public List<AppointmentDTO> getAppointmentsByEmail(String email) {
+    public List<AppointmentFullDTO> getAppointmentsByEmail(String email) {
         log.info("Cache Miss: Recupero appuntamenti dal DB per {}", email);
 
         // 1. Recupera ID Dottore (Correzione Logica: Appointment usa ID, non email)

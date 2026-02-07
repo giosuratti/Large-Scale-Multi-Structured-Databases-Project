@@ -37,7 +37,7 @@ public interface DoctorService {
      */
     DoctorReadDTO getDoctorByEmail(String email);
 
-    List<AppointmentDTO> getAppointmentsByEmail(String email);
+    List<AppointmentFullDTO> getAppointmentsByEmail(String email);
 
     DoctorRatingDTO getRatingsByDoctorEmail(String email);
 

@@ -108,10 +108,10 @@ public class PatientController {
             description = "Let a patient book a visit.")
     @PostMapping("/book")
     @PreAuthorize("hasRole('PATIENT')")
-    public ResponseEntity<AppointmentPatientDTO> bookAppointmentById(HttpServletRequest request, @RequestBody AppointmentDTO appointmentDTO) {
+    public ResponseEntity<AppointmentPatientDTO> bookAppointmentById(HttpServletRequest request, @RequestBody AppointmentFullDTO appointmentFullDTO) {
         String token = jwtTokenProvider.resolveToken(request);
         String email = jwtTokenProvider.getEmailFromToken(token);
-        return ResponseEntity.ok(patientService.bookAppointmentByEmail(email, appointmentDTO));
+        return ResponseEntity.ok(patientService.bookAppointmentByEmail(email, appointmentFullDTO));
     }
 
     @Operation(
@@ -205,6 +205,22 @@ public class PatientController {
 
         // Non abbiamo più bisogno dell'email dal token per la posizione!
         return ResponseEntity.ok(patientService.findSpecialistsByDiagnosisAndCity(city, diagnosis));
+    }
+
+    @Operation(
+            summary = "Get Doctor Details",
+            description = "Retrieves full details of a doctor by ID, including available slots and contacts."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Doctor details retrieved successfully"),
+            @ApiResponse(responseCode = "404", description = "Doctor not found")
+    })
+    @GetMapping("/doctor/{npi}")
+    // Può essere accessibile a tutti o solo ai pazienti loggati, decidi tu.
+    // Metto 'permitAll()' se vuoi che sia pubblico, altrimenti 'hasRole('PATIENT')'
+    @PreAuthorize("hasAnyRole('PATIENT', 'ADMIN')")
+    public ResponseEntity<DoctorReadSlotsDTO> getDoctorDetails(@PathVariable String npi) {
+        return ResponseEntity.ok(patientService.getDoctorByNpi(npi));
     }
 
 }

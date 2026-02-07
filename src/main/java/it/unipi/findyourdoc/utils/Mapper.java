@@ -144,6 +144,7 @@ public class Mapper {
         dto.setSpecializations(d.getSpecialties());
         dto.setGender(d.getGender());
         dto.setNpi(d.getNpi());
+        dto.setRatings(d.getRatings());
 
         if (d.getLocation() != null) {
             dto.setLocation(new LocationDTO(
@@ -155,11 +156,35 @@ public class Mapper {
         }
         return dto;
     }
+    public static DoctorReadSlotsDTO mapToReadSlotsDTO(Doctor d) {
+        DoctorReadSlotsDTO dto = new DoctorReadSlotsDTO();
+        dto.setId(String.valueOf(d.getId()));
+        dto.setEmail(d.getEmail());
+        dto.setTelephone(d.getTelephone());
 
-    public static AppointmentDTO toAppointmentDTO(AppointmentFull entity) {
+        dto.setFirstName(d.getFirstName());
+        dto.setLastName(d.getLastName());
+        dto.setSpecializations(d.getSpecialties());
+        dto.setGender(d.getGender());
+        dto.setNpi(d.getNpi());
+
+        if (d.getLocation() != null) {
+            dto.setLocation(new LocationDTO(
+                    d.getLocation().getAddress(),
+                    d.getLocation().getCity(),
+                    d.getLocation().getState(),
+                    d.getLocation().getZipCode()
+            ));
+        }
+        dto.setAvailableSlots(d.getAvailableSlots());
+        dto.setRatings(d.getRatings());
+        return dto;
+    }
+
+    public static AppointmentFullDTO toAppointmentDTO(AppointmentFull entity) {
         if (entity == null) return null;
 
-        AppointmentDTO dto = new AppointmentDTO();
+        AppointmentFullDTO dto = new AppointmentFullDTO();
         dto.setId(entity.getAppointmentId());
         dto.setDoctorId(entity.getDoctorId());
         // Mappiamo i nomi completi per comodità di visualizzazione

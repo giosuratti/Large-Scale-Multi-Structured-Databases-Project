@@ -1,5 +1,6 @@
 package it.unipi.findyourdoc.model.mongo;
 
+import it.unipi.findyourdoc.model.mongo.enums.AppointmentStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

@@ -1,7 +1,7 @@
 package it.unipi.findyourdoc.dto.mongo;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import it.unipi.findyourdoc.model.mongo.AppointmentStatus;
+import it.unipi.findyourdoc.model.mongo.enums.AppointmentStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

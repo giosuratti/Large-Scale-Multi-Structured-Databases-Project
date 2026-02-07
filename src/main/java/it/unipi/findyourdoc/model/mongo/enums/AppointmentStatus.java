@@ -1,4 +1,4 @@
-package it.unipi.findyourdoc.model.mongo;
+package it.unipi.findyourdoc.model.mongo.enums;
 
 public enum AppointmentStatus {
     CANCELLED,      // L'appuntamento è stato annullato

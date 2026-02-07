@@ -11,4 +11,7 @@ public interface PatientRepository extends UserRepository<Patient> {
     // Optional<Patient> findByEmail(String email);
 
     // void deleteByEmail(String email);
+
+    // Recupera solo l'email
+
 }

@@ -2,8 +2,6 @@ package it.unipi.findyourdoc.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -79,7 +77,7 @@ public class DoctorController {
     })
     @GetMapping("/my-appointments")
     @PreAuthorize("hasRole('DOCTOR')")
-    public ResponseEntity<List<AppointmentDTO>> getMyAgenda(HttpServletRequest request) {
+    public ResponseEntity<List<AppointmentFullDTO>> getMyAgenda(HttpServletRequest request) {
         // Estraiamo l'email dal token JWT
         String token = jwtTokenProvider.resolveToken(request);
         String email = jwtTokenProvider.getEmailFromToken(token);

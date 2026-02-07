@@ -39,7 +39,7 @@ public interface PatientService {
 
     PatientReadDTO getPatientByEmail(String email);
 
-    AppointmentPatientDTO bookAppointmentByEmail(String id, AppointmentDTO appointmentDTO);
+    AppointmentPatientDTO bookAppointmentByEmail(String id, AppointmentFullDTO appointmentFullDTO);
 
     void cancelAppointment(String id);
 
@@ -54,6 +54,8 @@ public interface PatientService {
     Page<RatingDTO> getAllRatingsByEmail(String email, Pageable pageable);
 
     List<SpecialistDTO> findSpecialistsByDiagnosisAndCity(String city, String diagnosis);
+
+    DoctorReadSlotsDTO getDoctorByNpi(String id);
 
 
 }

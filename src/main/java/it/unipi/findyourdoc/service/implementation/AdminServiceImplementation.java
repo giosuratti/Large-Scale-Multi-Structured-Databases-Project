@@ -2,6 +2,7 @@ package it.unipi.findyourdoc.service.implementation;
 
 import it.unipi.findyourdoc.dto.mongo.*;
 import it.unipi.findyourdoc.model.mongo.*;
+import it.unipi.findyourdoc.model.mongo.enums.AppointmentStatus;
 import it.unipi.findyourdoc.repository.mongo.AdminRepository;
 import it.unipi.findyourdoc.repository.mongo.AppointmentRepository;
 import it.unipi.findyourdoc.repository.mongo.DoctorRepository;
@@ -320,7 +321,7 @@ public class AdminServiceImplementation implements AdminService {
         doctor.setAvailableSlots(new ArrayList<>());
         doctor.setBookedThisWeek(new ArrayList<>());
         doctor.setRatings(new ArrayList<>());
-        doctor.setAvgRating(0.0f);
+        doctor.setAvgRating(0.0);
         doctor.setRatingCount(0);
         doctor.setTotalAppointments(0);
 

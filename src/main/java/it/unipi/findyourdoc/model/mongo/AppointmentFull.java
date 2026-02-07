@@ -32,7 +32,7 @@ public class AppointmentFull extends AppointmentBrief{
     private String patientLastName;
     private String patientTelephone;
     private ArrayList<String> specialties;
-    private float doctorRating;
+    private Double doctorRating;
 
     private Integer patientAge;
     private String patientGender;

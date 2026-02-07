@@ -27,5 +27,5 @@ public class RatingDTO {
     @Min(value = 1, message = "Rating must be at least 1")
     @Max(value = 5, message = "Rating cannot exceed 5")
     @Schema(description = "The score given (1 to 5)", example = "5")
-    private int rating;
+    private Integer rating;
 }

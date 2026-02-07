@@ -19,13 +19,14 @@ public interface DoctorGraphRepository extends Neo4jRepository<DoctorNode, Strin
             "WHERE toLower(doc.city) = toLower($city) " +
 
             // MAPPING ESATTO SUI CAMPI DEL DTO
-            "RETURN doc.firstName AS firstName," +
+            "RETURN doc.NPI AS npi, " +
+            "       doc.firstName AS firstName, " +
             "       doc.lastName AS lastName, " +
             "       spec.name AS specialization, " +
             "       doc.city AS city, " + // <--- Mappa sul campo 'city' del DTO
-            "       doc.phone AS phone " +
-            "       coalesce(doc.avgRating, 0.0) AS avgRating " +
-            "       doc.ratingCount AS ratingCount" +
+            "       doc.phone AS phone, " +
+            "       coalesce(doc.avgRating, 0.0) AS avgRating, " +
+            "       doc.ratingCount AS ratingCount " +
 
             "ORDER BY avgRating DESC")
     List<SpecialistDTO> findSpecialistsByDiagnosisAndCity(
@@ -57,7 +58,7 @@ public interface DoctorGraphRepository extends Neo4jRepository<DoctorNode, Strin
             @Param("gender") String gender,
             @Param("city") String city,
             @Param("specialties") List<String> specialties,
-            @Param("avgRating") Float avgRating,
+            @Param("avgRating") Double avgRating,
             @Param("ratingCount") Integer ratingCount
     );
 }

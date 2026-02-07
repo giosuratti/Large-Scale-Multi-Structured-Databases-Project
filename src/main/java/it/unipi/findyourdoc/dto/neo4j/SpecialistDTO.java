@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 public class SpecialistDTO {
 
     @Schema(description = "ID univoco del medico nel database", example = "65af12345")
-    private String doctorId;
+    private String npi;
 
     @Schema(description = "Nome del medico", example = "Giulia")
     private String firstName;
@@ -24,7 +24,10 @@ public class SpecialistDTO {
     private String lastName;
 
     @Schema(description = "Valutazione media ricevuta dai pazienti (da 1 a 5)", example = "4.8")
-    private float rating;
+    private Double avgRating;
+
+    @Schema(description = "Valutazione media ricevuta dai pazienti (da 1 a 5)", example = "4.8")
+    private Integer ratingCount;
 
     @Schema(description = "Città del medico")
     private String city;

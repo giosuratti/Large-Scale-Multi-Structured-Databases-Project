@@ -1,7 +1,7 @@
 package it.unipi.findyourdoc.dto.mongo;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import it.unipi.findyourdoc.model.mongo.AppointmentStatus;
+import it.unipi.findyourdoc.model.mongo.enums.AppointmentStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -16,14 +16,14 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Schema(description = "Detailed DTO for an appointment, used for display in dashboards.")
-public class AppointmentDTO {
+public class AppointmentFullDTO {
 
     @Schema(description = "The unique ID of the appointment", example = "1024")
     private String id;
 
     // --- Informazioni sul Medico ---
     @Schema(description = "ID del medico (utile per link al profilo)", example = "501")
-    private String doctorId;
+    private String doctorId; // Mettere NPI
 
     @Schema(description = "Date and time of the appointment", example = "2026-05-15T10:30:00")
     private LocalDateTime DateTime;
@@ -37,6 +37,8 @@ public class AppointmentDTO {
 
     @Schema(description = "Last name of the patient", example = "Rossi")
     private String patientLastName;
+
+    // Email
 
     @Schema(description = "Contact telephone of the patient", example = "3331234567")
     private String patientTelephone;
@@ -52,7 +54,7 @@ public class AppointmentDTO {
     private List<String> specialties;
 
     @Schema(description = "Average rating of the doctor", example = "4.8")
-    private float doctorRating;
+    private Double doctorRating;
 
     @Schema(description = "Location of the medical office")
     private LocationDTO location;
