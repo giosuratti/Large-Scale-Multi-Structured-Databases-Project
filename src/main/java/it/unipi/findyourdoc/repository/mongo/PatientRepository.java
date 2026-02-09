@@ -20,7 +20,7 @@ public interface PatientRepository extends UserRepository<Patient> {
     @Query("{ '_id': ?0, 'bookedAppointments.appointmentId': ?1 }")
     @Update("{ '$set': { " +
             "  'bookedAppointments.$.location': ?2, " +     // Aggiorna l'oggetto Location
-            "  'bookedAppointments.$.doctorPhone': ?3 " +  // Aggiorna la stringa Telefono
+            "  'bookedAppointments.$.doctorTelephone': ?3 " +  // Aggiorna la stringa Telefono
             "} }")
     void updateEmbeddedDoctorData(
             String patientId,

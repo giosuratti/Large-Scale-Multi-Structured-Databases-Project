@@ -58,7 +58,7 @@ public interface AppointmentRepository extends MongoRepository<AppointmentFull, 
     // 2. AGGIORNAMENTO MASSIVO (Bulk Update)
     // Aggiorna Location e Telefono di TUTTI gli appuntamenti futuri in una sola query atomica.
     @Query("{ 'doctorNpi': ?0, 'dateTime': { $gt: new Date() }, 'status': { $in: ['SCHEDULED', 'PENDING', 'RESCHEDULED'] } }")
-    @Update("{ '$set': { 'location': ?1, 'doctorPhone': ?2 } }")
-    void updateFutureAppointmentsDataBulk(String doctorNpi, Location newLocation, String newPhone);
+    @Update("{ '$set': { 'location': ?1} }")
+    void updateFutureAppointmentsDataBulk(String doctorNpi, Location newLocation);
 
 }

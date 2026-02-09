@@ -390,7 +390,7 @@ public class AdminServiceImplementation implements AdminService {
 
         // --- FASE 2: Aggiornamento MASTER COLLECTION (Bulk Update) ---
         // Invece di scaricare 1000 oggetti e salvarli 1000 volte, facciamo un solo update.
-        appointmentRepository.updateFutureAppointmentsDataBulk(npi, newLocation, newPhone);
+        appointmentRepository.updateFutureAppointmentsDataBulk(npi, newLocation);
 
         // --- FASE 3: Aggiornamento EMBEDDED PAZIENTI ---
         // Qui ci servono gli ID per sapere QUALI pazienti toccare.
