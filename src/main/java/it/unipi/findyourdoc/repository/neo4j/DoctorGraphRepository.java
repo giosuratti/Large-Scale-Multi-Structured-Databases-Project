@@ -61,4 +61,13 @@ public interface DoctorGraphRepository extends Neo4jRepository<DoctorNode, Strin
             @Param("avgRating") Double avgRating,
             @Param("ratingCount") Integer ratingCount
     );
+
+
+    @Query("MATCH (d:Doctor {npi: $npi}) " +
+            "SET d.phone = $phone, d.city = $city")
+    void updateDoctorDataByNpi(
+            @Param("npi") String npi,
+            @Param("phone") String phone,
+            @Param("city") String city
+    );
 }

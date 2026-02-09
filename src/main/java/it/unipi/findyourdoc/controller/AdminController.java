@@ -309,5 +309,17 @@ public class AdminController {
         return ResponseEntity.ok(adminService.registerDoctor(createDTO));
     }
 
+    @Operation(
+            summary = "Sync All Changed Doctors",
+            description = "Automatically finds all doctors with 'dataUpdated=true' and syncs their phone/location across Neo4j and Appointments."
+    )
+    @PostMapping("/sync/changed-doctors")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<String>> syncAllChangedDoctors() {
+        // Restituisce la lista degli NPI aggiornati correttamente
+        List<String> updatedNpis = adminService.syncAllChangedDoctors();
+        return ResponseEntity.ok(updatedNpis);
+    }
+
 
 }

@@ -28,9 +28,10 @@ public class AppointmentPatientDTO {
     @Schema(description = "Stato dell'appuntamento (es. PENDING, CONFIRMED, CANCELLED)", example = "CONFIRMED")
     private AppointmentStatus status;
 
+    
     // --- Informazioni sul Medico ---
     @Schema(description = "ID del medico (utile per link al profilo)", example = "501")
-    private String doctorId;
+    private String doctorNpi;
 
     @Schema(description = "Nome del medico", example = "Giulia")
     private String doctorFirstName;

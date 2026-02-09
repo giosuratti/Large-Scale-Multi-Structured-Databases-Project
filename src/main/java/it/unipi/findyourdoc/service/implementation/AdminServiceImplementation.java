@@ -2,6 +2,7 @@ package it.unipi.findyourdoc.service.implementation;
 
 import it.unipi.findyourdoc.dto.mongo.*;
 import it.unipi.findyourdoc.model.mongo.*;
+import it.unipi.findyourdoc.model.mongo.Location;
 import it.unipi.findyourdoc.model.mongo.enums.AppointmentStatus;
 import it.unipi.findyourdoc.repository.mongo.AdminRepository;
 import it.unipi.findyourdoc.repository.mongo.AppointmentRepository;
@@ -9,7 +10,7 @@ import it.unipi.findyourdoc.repository.mongo.DoctorRepository;
 import it.unipi.findyourdoc.repository.mongo.PatientRepository;
 import it.unipi.findyourdoc.repository.neo4j.DoctorGraphRepository;
 import it.unipi.findyourdoc.service.AdminService;
-import it.unipi.findyourdoc.service.DoctorService; // SERVIVA QUESTO
+import it.unipi.findyourdoc.service.DoctorService;
 import it.unipi.findyourdoc.utils.Mapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -22,10 +23,11 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.data.redis.core.StringRedisTemplate; // CORRETTO
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -75,11 +77,13 @@ public class AdminServiceImplementation implements AdminService {
         Admin admin = adminRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin not found"));
         if (dto.getEmail() != null && !dto.getEmail().isBlank() && !dto.getEmail().equalsIgnoreCase(admin.getEmail())) {
-            if (adminRepository.existsByEmail(dto.getEmail())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New email already in use");
+            if (adminRepository.existsByEmail(dto.getEmail()))
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New email already in use");
             admin.setEmail(dto.getEmail());
         }
         if (dto.getTelephone() != null) admin.setTelephone(dto.getTelephone());
-        if (dto.getPassword() != null && !dto.getPassword().isBlank()) admin.setPassword(passwordEncoder.encode(dto.getPassword()));
+        if (dto.getPassword() != null && !dto.getPassword().isBlank())
+            admin.setPassword(passwordEncoder.encode(dto.getPassword()));
         return Mapper.mapToReadDTO(adminRepository.save(admin));
     }
 
@@ -305,7 +309,8 @@ public class AdminServiceImplementation implements AdminService {
     @Override
     public DoctorReadDTO registerDoctor(DoctorCreateDTO createDTO) {
         // [CODICE IDENTICO AL TUO, VA BENE]
-        if (doctorRepository.existsByEmail(createDTO.getEmail()) || doctorRepository.existsByNpi(createDTO.getNpi())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email already in use");
+        if (doctorRepository.existsByEmail(createDTO.getEmail()) || doctorRepository.existsByNpi(createDTO.getNpi()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email already in use");
 
         Doctor doctor = new Doctor();
         doctor.setEmail(createDTO.getEmail());
@@ -345,4 +350,67 @@ public class AdminServiceImplementation implements AdminService {
 
         return Mapper.mapToReadDTO(savedDoctor);
     }
+
+    @Override
+    public List<String> syncAllChangedDoctors() {
+
+        // 1. Recupera la lista leggera (Solo NPI e dati da cambiare)
+        List<DoctorUpdateProjection> pendingSyncs = doctorRepository.findAllPendingSyncs();
+
+        List<String> successfullySyncedNpis = new ArrayList<>();
+
+        if (pendingSyncs.isEmpty()) return successfullySyncedNpis;
+
+        log.info("Found {} doctors pending sync.", pendingSyncs.size());
+
+        for (DoctorUpdateProjection docInfo : pendingSyncs) {
+            try {
+                performSingleDoctorSync(docInfo);
+                successfullySyncedNpis.add(docInfo.npi());
+            } catch (Exception e) {
+                log.error("Failed to sync doctor NPI: {}", docInfo.npi(), e);
+            }
+        }
+
+        return successfullySyncedNpis;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    protected void performSingleDoctorSync(DoctorUpdateProjection docInfo) {
+        String npi = docInfo.npi();
+        String newPhone = docInfo.telephone();
+        Location newLocation = docInfo.location();
+
+        if (newPhone == null || newLocation == null) {
+            throw new IllegalStateException("Sync data incomplete for NPI: " + npi);
+        }
+
+        // --- FASE 1: Aggiornamento NEO4J ---
+        doctorGraphRepository.updateDoctorDataByNpi(npi, newPhone, newLocation.getCity());
+
+        // --- FASE 2: Aggiornamento MASTER COLLECTION (Bulk Update) ---
+        // Invece di scaricare 1000 oggetti e salvarli 1000 volte, facciamo un solo update.
+        appointmentRepository.updateFutureAppointmentsDataBulk(npi, newLocation, newPhone);
+
+        // --- FASE 3: Aggiornamento EMBEDDED PAZIENTI ---
+        // Qui ci servono gli ID per sapere QUALI pazienti toccare.
+        // Scarichiamo solo la proiezione (pochi KB).
+        List<AppointmentSyncProjection> futureAppointments = appointmentRepository.findFutureSummariesByDoctorNpi(npi);
+
+        for (AppointmentSyncProjection appt : futureAppointments) {
+            // Usiamo i dati della proiezione per mirare al paziente giusto
+            patientRepository.updateEmbeddedDoctorData(
+                    appt.patientId(),
+                    appt.appointmentId(),
+                    newLocation,
+                    newPhone
+            );
+        }
+
+        // --- FASE 4: RESET FLAG ---
+        doctorRepository.markAsSyncedByNpi(npi);
+
+        log.info("Successfully synced doctor NPI: {} (Updated {} patient records)", npi, futureAppointments.size());
+    }
+
 }

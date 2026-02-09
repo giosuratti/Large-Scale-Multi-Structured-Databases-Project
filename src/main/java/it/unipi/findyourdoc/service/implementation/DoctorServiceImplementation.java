@@ -13,7 +13,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
-import org.springframework.data.redis.core.StringRedisTemplate; // IMPORTANTE
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -21,6 +24,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -45,35 +52,25 @@ public class DoctorServiceImplementation implements DoctorService {
     private static final String DOCTOR_SLOTS_CACHE_PREFIX = "doctor:slots:";
 
     @Override
-    public DoctorReadDTO updateDoctor(String email, DoctorUpdateDTO updateDTO) {
+    public DoctorReadDTO updateDoctorLocation(String email, LocationDTO locationDTO) {
         Doctor doctor = doctorRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Doctor not found"));
 
-        if (updateDTO.getEmail() != null && !updateDTO.getEmail().equalsIgnoreCase(doctor.getEmail())) {
-            if (doctorRepository.existsByEmail(updateDTO.getEmail())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New email already in use");
-            }
-            // TODO: Se cambia email, dovremmo invalidare la cache vecchia!
-            // redisTemplate.delete("doctor_profile::" + doctor.getEmail());
-            doctor.setEmail(updateDTO.getEmail());
-        }
+        // 1. Mappatura DTO -> Entity
+        Location location = new Location();
+        location.setAddress(locationDTO.getAddress());
+        location.setCity(locationDTO.getCity());
+        location.setState(locationDTO.getState());
+        location.setZipCode(locationDTO.getZipCode());
+        // Se hai latitudine/longitudine, settale qui
 
-        if (updateDTO.getTelephone() != null) doctor.setTelephone(updateDTO.getTelephone());
-        if (updateDTO.getPassword() != null && !updateDTO.getPassword().isBlank()) {
-            doctor.setPassword(passwordEncoder.encode(updateDTO.getPassword()));
-        }
-        if (updateDTO.getFirstName() != null) doctor.setFirstName(updateDTO.getFirstName());
-        if (updateDTO.getLastName() != null) doctor.setLastName(updateDTO.getLastName());
-        if (updateDTO.getSpecializations() != null) doctor.setSpecialties(updateDTO.getSpecializations());
-        if (updateDTO.getGender() != null) doctor.setGender(updateDTO.getGender());
-        if (updateDTO.getLocation() != null) {
-            doctor.setLocation(Mapper.mapLocationDtoToEntity(updateDTO.getLocation()));
-        }
-
+        // 2. Aggiornamento Documento
+        doctor.setLocation(location);
+        doctor.setUpdated(Boolean.TRUE);
         Doctor savedDoctor = doctorRepository.save(doctor);
 
-        // INVALIDAZIONE CACHE PROFILE (se la usi)
-        // redisTemplate.delete("doctor_ratings::" + email);
+        // 3. Invalida Cache Profilo
+        invalidateDoctorCache(email);
 
         return Mapper.mapToReadDTO(savedDoctor);
     }
@@ -104,11 +101,44 @@ public class DoctorServiceImplementation implements DoctorService {
     }
 
     @Override
-    @Cacheable(value = "doctor_ratings", key = "#email")
-    public DoctorRatingDTO getRatingsByDoctorEmail(String email) {
+    public Page<Integer> getRatingsByDoctorEmail(String email, Pageable pageable) {
+        // 1. Recupera il Dottore
         Doctor doctor = doctorRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Doctor not found"));
-        return Mapper.mapToDoctorRatingDTO(doctor.getRatings());
+
+        // 2. Recupera la lista grezza di interi (gestione null-safe)
+        List<Integer> allRatings = doctor.getRatings();
+        if (allRatings == null) {
+            allRatings = new ArrayList<>();
+        }
+
+        // 3. Calcola gli indici per "tagliare" la lista (Paginazione in-memory)
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), allRatings.size());
+
+        // 4. Estrae la sottolista per la pagina corrente
+        List<Integer> pageContent;
+        if (start > allRatings.size()) {
+            pageContent = new ArrayList<>(); // Pagina vuota se chiedi una pagina inesistente
+        } else {
+            pageContent = allRatings.subList(start, end);
+        }
+
+        // 5. Restituisce l'oggetto Page<Integer>
+        // (Contenuto: [5, 4, ...], Pageable info, Totale elementi)
+        return new PageImpl<>(pageContent, pageable, allRatings.size());
+    }
+
+    // Metodo helper per normalizzare l'input del frontend
+    private LocalDateTime normalizeInputDate(LocalDateTime inputRaw) {
+        // 1. Tronca i millisecondi (es. 14:00:00.984 -> 14:00:00.000)
+        LocalDateTime cleanRaw = inputRaw.truncatedTo(ChronoUnit.MINUTES);
+
+        // 2. Converti da UTC (Input) a System Default (DB)
+        // Interpretiamo l'input come se fosse UTC e lo spostiamo nel fuso del server.
+        return cleanRaw.atZone(ZoneOffset.UTC)
+                .withZoneSameInstant(ZoneId.systemDefault())
+                .toLocalDateTime();
     }
 
     @Override
@@ -122,27 +152,36 @@ public class DoctorServiceImplementation implements DoctorService {
         }
 
         List<LocalDateTime> newSlotsToAdd = new ArrayList<>();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES); // Tronchiamo anche 'now'
 
         for (SlotDTO dto : slotDTOs) {
-            if (dto.getDateTime().isBefore(now)) continue;
+            // 1. Normalizziamo l'input (UTC -> Local + No Millisecondi)
+            LocalDateTime normalizedSlot = normalizeInputDate(dto.getDateTime());
 
+            // 2. Controllo validità temporale
+            if (normalizedSlot.isBefore(now)) continue;
+
+            // 3. Controllo duplicati usando l'orario normalizzato
             boolean exists = doctor.getAvailableSlots().stream()
-                    .anyMatch(existingSlot -> existingSlot.isEqual(dto.getDateTime()));
+                    .map(s -> s.truncatedTo(ChronoUnit.MINUTES)) // Tronchiamo anche quelli nel DB per sicurezza
+                    .anyMatch(existingSlot -> existingSlot.isEqual(normalizedSlot));
 
             if (exists) continue;
-            newSlotsToAdd.add(dto.getDateTime());
+
+            // 4. Aggiungiamo lo slot GIÀ CONVERTITO in locale
+            newSlotsToAdd.add(normalizedSlot);
         }
 
         if (!newSlotsToAdd.isEmpty()) {
             doctor.getAvailableSlots().addAll(newSlotsToAdd);
             Collections.sort(doctor.getAvailableSlots());
+            doctor.setUpdated(true); // Imposta flag per sync
             doctorRepository.save(doctor);
 
-            // 🔥 REDIS INVALIDATION: Slot cambiati -> Pulisci la cache!
+            // Redis Invalidation
             String cacheKey = DOCTOR_SLOTS_CACHE_PREFIX + doctor.getId();
             redisTemplate.delete(cacheKey);
-            log.info("Invalidata cache slot per dottore ID: {}", doctor.getId());
+            log.info("Aggiunti {} slot e invalidata cache per dottore ID: {}", newSlotsToAdd.size(), doctor.getId());
         }
     }
 
@@ -152,22 +191,31 @@ public class DoctorServiceImplementation implements DoctorService {
         Doctor doctor = doctorRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Doctor not found"));
 
-        if (doctor.getAvailableSlots() == null || doctor.getAvailableSlots().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No availability slots found");
-        }
+        // 1. Normalizziamo l'input (UTC -> Local Server)
+        // Esempio: Input 14:00 (UTC) diventa 16:00 (Locale)
+        LocalDateTime targetSlot = normalizeInputDate(slotDTO.getDateTime());
 
-        boolean removed = doctor.getAvailableSlots().removeIf(slot -> slot.isEqual(slotDTO.getDateTime()));
+        log.info("Tentativo rimozione slot. Input Originale: {} -> Target Locale: {}",
+                slotDTO.getDateTime(), targetSlot);
+
+        // 2. Rimuoviamo usando match sui minuti
+        boolean removed = doctor.getAvailableSlots().removeIf(existingSlot ->
+                existingSlot.truncatedTo(ChronoUnit.MINUTES).isEqual(targetSlot)
+        );
 
         if (!removed) {
+            log.error("Slot non trovato! Target Locale: {} | DB Slots: {}", targetSlot, doctor.getAvailableSlots());
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Slot not found");
         }
 
+        // 3. Salvataggio
+        doctor.setUpdated(true);
         doctorRepository.save(doctor);
 
-        // 🔥 REDIS INVALIDATION: Slot cambiati -> Pulisci la cache!
+        // Redis Invalidation
         String cacheKey = DOCTOR_SLOTS_CACHE_PREFIX + doctor.getId();
         redisTemplate.delete(cacheKey);
-        log.info("Invalidata cache slot (remove) per dottore ID: {}", doctor.getId());
+        log.info("Rimosso slot e invalidata cache per dottore ID: {}", doctor.getId());
     }
 
     @Override
@@ -185,17 +233,69 @@ public class DoctorServiceImplementation implements DoctorService {
     }
 
     @Override
-    public List<SymptomReportBriefDTO> getPatientSymptomReports(String patientId) {
+    public Page<SymptomReportBriefDTO> getPatientSymptomReports(String patientId, Pageable pageable) {
+        // 1. Recupera il paziente
         Patient patient = patientRepository.findById(patientId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Patient not found"));
 
-        if (patient.getRecentSymptomReports() == null || patient.getRecentSymptomReports().isEmpty()) {
-            return new ArrayList<>();
+        // 2. Recupera la lista grezza (gestione null-safe)
+        List<SymptomReportBrief> rawReports = patient.getRecentSymptomReports();
+        if (rawReports == null) {
+            rawReports = new ArrayList<>();
         }
 
-        return patient.getRecentSymptomReports().stream()
+        // 3. Mappatura e Ordinamento (TUTTA la lista)
+        // Nota: L'ordinamento lo facciamo qui. Se volessi usare pageable.getSort() servirebbe logica extra.
+        List<SymptomReportBriefDTO> allReports = rawReports.stream()
                 .map(Mapper::mapToSymptomBriefDTO)
-                .sorted(Comparator.comparing(SymptomReportBriefDTO::getCreatedAt).reversed())
+                .sorted(Comparator.comparing(SymptomReportBriefDTO::getCreatedAt).reversed()) // Ordine decrescente
                 .collect(Collectors.toList());
+
+        // 4. Calcolo degli indici per la Paginazione In-Memory
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), allReports.size());
+
+        // 5. Gestione casi limite (pagina richiesta fuori range)
+        List<SymptomReportBriefDTO> pageContent;
+        if (start > allReports.size()) {
+            pageContent = new ArrayList<>();
+        } else {
+            // Taglia la lista per restituire solo gli elementi della pagina corrente
+            pageContent = allReports.subList(start, end);
+        }
+
+        // 6. Restituisce l'oggetto Page
+        // (Contenuto della pagina, info sulla paginazione, dimensione totale della lista originale)
+        return new PageImpl<>(pageContent, pageable, allReports.size());
+    }
+
+    @Override
+    public DoctorReadDTO updateDoctorPhone(String email, TelephoneUpdateDTO phoneDTO) {
+        Doctor doctor = doctorRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Doctor not found"));
+
+        // Aggiorna solo il telefono
+        doctor.setTelephone(phoneDTO.getTelephone());
+        doctor.setUpdated(Boolean.TRUE);
+        Doctor savedDoctor = doctorRepository.save(doctor);
+
+        // Invalida cache profilo
+        invalidateDoctorCache(email);
+
+        return Mapper.mapToReadDTO(savedDoctor);
+    }
+
+    @Override
+    public void updateDoctorPassword(String email, PasswordChangeDTO newPassword) {
+        Doctor doctor = doctorRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Doctor not found"));
+
+        // Hash della nuova password (FONDAMENTALE)
+        String encodedPassword = passwordEncoder.encode(newPassword.getNewPassword());
+
+        doctor.setPassword(encodedPassword);
+        doctorRepository.save(doctor);
+
+        // Nota: Qui non serve invalidare cache o sync admin.
     }
 }

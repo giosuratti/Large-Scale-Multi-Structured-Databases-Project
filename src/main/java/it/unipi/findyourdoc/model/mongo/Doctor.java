@@ -15,7 +15,13 @@ import java.util.ArrayList;
 @NoArgsConstructor
 @AllArgsConstructor
 @Document(collection = "doctors")
+
 @CompoundIndex(name = "idx_npi_avgRating_ratingCount", def = "{'npi': 1, 'avgRating': 1, 'ratingCount': 1}")
+@CompoundIndex(
+        name = "idx_npi_telephone_location_updated_partial",
+        def = "{'npi': 1, 'telephone': 1, 'location': 1}",
+        partialFilter = "{'updated': true}"
+)
 public class Doctor extends User {
 
     private String firstName;
@@ -33,4 +39,5 @@ public class Doctor extends User {
     private Integer ratingCount;
     private Integer totalAppointments;
     private String gender;
+    private Boolean updated;
 }

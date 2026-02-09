@@ -48,13 +48,6 @@ public class AppointmentFullDTO {
     @Schema(description = "Contact telephone of the patient", example = "3331234567")
     private String patientTelephone;
 
-    // --- Dati del Dottore (ereditati concettualmente) ---
-    @Schema(description = "First name of the doctor", example = "Giulia")
-    private String doctorFirstName;
-
-    @Schema(description = "Last name of the doctor", example = "Bianchi")
-    private String doctorLastName;
-
     @Schema(description = "List of doctor's specialties", example = "['Cardiology', 'Surgery']")
     private List<String> specialties;
 

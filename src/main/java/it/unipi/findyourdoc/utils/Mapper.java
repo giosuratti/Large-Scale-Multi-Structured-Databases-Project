@@ -35,7 +35,7 @@ public class Mapper {
         dto.setDoctorSpecialties(entity.getSpecialties());
         dto.setDoctorFirstName(doctorFirstName);
         dto.setDoctorLastName(doctorLastName);
-        dto.setDoctorId(entity.getDoctorId());
+        dto.setDoctorNpi(entity.getDoctorNpi());
 
         return dto;
     }
@@ -61,7 +61,7 @@ public class Mapper {
         // Campi specifici presenti nell'embedded del paziente
         dto.setDoctorFirstName(entity.getDoctorFirstName());
         dto.setDoctorLastName(entity.getDoctorLastName());
-        dto.setDoctorId(entity.getDoctorId());
+        dto.setDoctorNpi(entity.getDoctorNpi());
         dto.setDoctorSpecialties(entity.getDoctorSpecialties());
 
         return dto;
@@ -150,7 +150,8 @@ public class Mapper {
         dto.setGender(d.getGender());
         dto.setNpi(d.getNpi());
         dto.setRatings(d.getRatings());
-
+        dto.setAvgRating(d.getAvgRating());
+        dto.setRatingCount(d.getRatingCount());
         if (d.getLocation() != null) {
             dto.setLocation(new LocationDTO(
                     d.getLocation().getAddress(),
@@ -196,10 +197,21 @@ public class Mapper {
         // Mappiamo i nomi completi per comodità di visualizzazione
         dto.setPatientFirstName(entity.getPatientFirstName());
         dto.setPatientLastName(entity.getPatientLastName());
-
         dto.setDateTime(entity.getDateTime());
         dto.setStatus(entity.getStatus());
-
+        dto.setSpecialties(entity.getSpecialties());
+        dto.setDoctorRating(entity.getDoctorRating());
+        if (entity.getLocation() != null) {
+            dto.setLocation(new LocationDTO(
+                    entity.getLocation().getAddress(),
+                    entity.getLocation().getCity(),
+                    entity.getLocation().getState(),
+                    entity.getLocation().getZipCode()
+            ));
+        }
+        dto.setDoctorNpi(entity.getDoctorNpi());
+        dto.setPatientTelephone(dto.getPatientTelephone());
+        dto.setPatientEmail(dto.getPatientEmail());
         return dto;
     }
 

@@ -1,7 +1,6 @@
 package it.unipi.findyourdoc.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -9,14 +8,17 @@ import it.unipi.findyourdoc.dto.mongo.*;
 import it.unipi.findyourdoc.security.JwtTokenProvider;
 import it.unipi.findyourdoc.service.DoctorService;
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * REST controller for managing Medical Doctors.
@@ -36,36 +38,51 @@ public class DoctorController {
 
 
 
-    @Operation(
-            summary = "Update Doctor Profile",
-            description = "Updates professional information or credentials. Requires 'DOCTOR' role.")
-    @ApiResponses(
-            value = {
-                    @ApiResponse(responseCode = "200", description = "Profile updated successfully"),
-                    @ApiResponse(responseCode = "404", description = "Doctor not found"),
-                    @ApiResponse(responseCode = "403", description = "Forbidden")
-            })
-    @PutMapping("/{email}")
-    @PreAuthorize("hasRole('DOCTOR')")
-    public ResponseEntity<DoctorReadDTO> updateDoctor(
-            @Parameter(description = "Email of the doctor to update") @PathVariable String email,
-            @RequestBody DoctorUpdateDTO updateDTO) {
-        return ResponseEntity.ok(doctorService.updateDoctor(email, updateDTO));
+    @Operation(summary = "Update only the location", description = "Updates the doctor's address. Does NOT trigger sync with appointments or search engine.")
+    @PutMapping("/me/location")
+    @PreAuthorize("hasAnyRole('DOCTOR')") // Anche l'admin può farlo se serve
+    public ResponseEntity<DoctorReadDTO> updateLocation(
+            HttpServletRequest request,
+            @RequestBody @Valid LocationDTO locationDTO) { // <-- Prende SOLO LocationDTO
+
+        String token = jwtTokenProvider.resolveToken(request);
+        String email = jwtTokenProvider.getEmailFromToken(token);
+
+        return ResponseEntity.ok(doctorService.updateDoctorLocation(email, locationDTO));
+    }
+
+    // --- UPDATE PASSWORD ---
+    @Operation(summary = "Update password", description = "Updates login password. No sync needed.")
+    @PutMapping("/me/password")
+    @PreAuthorize("hasAnyRole('DOCTOR', 'ADMIN')")
+    public ResponseEntity<Void> updatePassword(HttpServletRequest request,
+                                               @RequestBody PasswordChangeDTO newPassword) {
+        String email = jwtTokenProvider.getEmailFromToken(jwtTokenProvider.resolveToken(request));
+        doctorService.updateDoctorPassword(email, newPassword);
+        return ResponseEntity.ok().build();
+    }
+
+    @Operation(summary = "Update phone number", description = "Updates doctor's phone. Admin sync required for search engine update.")
+    @PutMapping("/me/phone")
+    @PreAuthorize("hasAnyRole('DOCTOR', 'ADMIN')")
+    public ResponseEntity<DoctorReadDTO> updatePhone(HttpServletRequest request,
+                                                     @RequestBody TelephoneUpdateDTO phoneDTO) {
+        String email = jwtTokenProvider.getEmailFromToken(jwtTokenProvider.resolveToken(request));
+        return ResponseEntity.ok(doctorService.updateDoctorPhone(email, phoneDTO));
     }
 
     @Operation(
             summary = "Get Current Doctor Info",
-            description = "Extracts professional email directly from the JWT Token context.")
+            description = "Retrieves the full profile of the currently logged-in doctor using the JWT token.")
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Map<String, String>> getCurrentDoctorInfo(HttpServletRequest request) {
+    public ResponseEntity<DoctorReadDTO> getCurrentDoctorInfo(HttpServletRequest request) {
         String token = jwtTokenProvider.resolveToken(request);
         String email = jwtTokenProvider.getEmailFromToken(token); // Il subject del token è la mail
 
-        Map<String, String> doctorInfo = new HashMap<>();
-        doctorInfo.put("email", email);
+        DoctorReadDTO doctorProfile = doctorService.getDoctorByEmail(email);
 
-        return ResponseEntity.ok(doctorInfo);
+        return ResponseEntity.ok(doctorProfile);
     }
 
     @Operation(
@@ -87,13 +104,18 @@ public class DoctorController {
     }
 
 
-    @Operation(summary = "Get all ratings for a specific doctor",
-            description = "Public endpoint to view all feedback for a doctor.")
+    @Operation(summary = "Get all numeric ratings for a specific doctor",
+            description = "Public endpoint to view all integer ratings page by page.")
     @GetMapping("/ratings")
-    public ResponseEntity<DoctorRatingDTO> getDoctorRatings(HttpServletRequest request) {
+    public ResponseEntity<Page<Integer>> getDoctorRatings(
+            HttpServletRequest request,
+            @ParameterObject Pageable pageable) { // <-- Aggiungi Pageable
+
         String token = jwtTokenProvider.resolveToken(request);
         String email = jwtTokenProvider.getEmailFromToken(token);
-        return ResponseEntity.ok(doctorService.getRatingsByDoctorEmail(email));
+
+        // Restituisce una Pagina di Interi
+        return ResponseEntity.ok(doctorService.getRatingsByDoctorEmail(email, pageable));
     }
 
     @Operation(summary = "Add availability slots",
@@ -126,9 +148,12 @@ public class DoctorController {
 
     @GetMapping("/patient/{patientId}/symptom-reports")
     @PreAuthorize("hasRole('DOCTOR')")
-    @Operation(summary = "Ottiene i report dei sintomi recenti di un paziente specifico")
-    public ResponseEntity<List<SymptomReportBriefDTO>> getPatientSymptomReports(@PathVariable String patientId) {
-        List<SymptomReportBriefDTO> reports = doctorService.getPatientSymptomReports(patientId);
+    @Operation(summary = "Ottiene i report dei sintomi recenti di un paziente (Paginato)")
+    public ResponseEntity<Page<SymptomReportBriefDTO>> getPatientSymptomReports(
+            @PathVariable String patientId,
+            @ParameterObject Pageable pageable) { // <-- Aggiunto Pageable
+
+        Page<SymptomReportBriefDTO> reports = doctorService.getPatientSymptomReports(patientId, pageable);
         return ResponseEntity.ok(reports);
     }
 

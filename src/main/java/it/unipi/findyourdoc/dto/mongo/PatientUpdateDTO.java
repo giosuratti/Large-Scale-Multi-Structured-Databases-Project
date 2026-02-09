@@ -14,6 +14,7 @@ import lombok.AllArgsConstructor;
 @EqualsAndHashCode(callSuper=false)
 public class PatientUpdateDTO extends UserUpdateDTO {
 
+
     @Schema(description = "The updated first name.", example = "Mario")
     private String firstName;
 

@@ -15,7 +15,7 @@ import java.util.ArrayList;
 public class AppointmentPatient extends AppointmentBrief{
     private String doctorLastName;
     private String doctorFirstName;
-    private String doctorId;
+    private String doctorNpi;
 
     private String doctorEmail;
     private String doctorTelephone;

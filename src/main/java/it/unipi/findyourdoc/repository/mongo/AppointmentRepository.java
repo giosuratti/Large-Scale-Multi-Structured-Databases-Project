@@ -1,7 +1,9 @@
 package it.unipi.findyourdoc.repository.mongo;
 
 import it.unipi.findyourdoc.dto.mongo.AppointmentFullSummary;
+import it.unipi.findyourdoc.dto.mongo.AppointmentSyncProjection;
 import it.unipi.findyourdoc.model.mongo.AppointmentFull;
+import it.unipi.findyourdoc.model.mongo.Location;
 import it.unipi.findyourdoc.model.mongo.enums.AppointmentStatus;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
@@ -40,5 +42,23 @@ public interface AppointmentRepository extends MongoRepository<AppointmentFull, 
     @Query("{ '_id': ?0 }")
     @Update("{ '$set': { 'status': ?1 } }")
     void updateStatus(String id, AppointmentStatus status);
+
+    @Query("{ 'doctorNpi': ?0, " +
+            "  'dateTime': { $gt: new Date() }, " +
+            "  'status': { $in: ['SCHEDULED', 'PENDING', 'RESCHEDULED'] } }")
+    List<AppointmentFull> findFutureAppointmentsByDoctorNpi(String doctorNpi);
+
+    // 1. LEGGE SOLO I CAMPI NECESSARI (Proiezione)
+    @Query(
+            value = "{ 'doctorNpi': ?0, 'dateTime': { $gt: new Date() }, 'status': { $in: ['SCHEDULED', 'PENDING', 'RESCHEDULED'] } }",
+            fields = "{ 'appointmentId': 1, 'patientId': 1 }" // Scarica SOLO questi campi!
+    )
+    List<AppointmentSyncProjection> findFutureSummariesByDoctorNpi(String doctorNpi);
+
+    // 2. AGGIORNAMENTO MASSIVO (Bulk Update)
+    // Aggiorna Location e Telefono di TUTTI gli appuntamenti futuri in una sola query atomica.
+    @Query("{ 'doctorNpi': ?0, 'dateTime': { $gt: new Date() }, 'status': { $in: ['SCHEDULED', 'PENDING', 'RESCHEDULED'] } }")
+    @Update("{ '$set': { 'location': ?1, 'doctorPhone': ?2 } }")
+    void updateFutureAppointmentsDataBulk(String doctorNpi, Location newLocation, String newPhone);
 
 }

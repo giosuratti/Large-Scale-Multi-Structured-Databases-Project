@@ -20,4 +20,6 @@ public interface AdminService {
 
     DoctorReadDTO registerDoctor(DoctorCreateDTO createDTO);
 
+    public List<String> syncAllChangedDoctors();
+
 }
