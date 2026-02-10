@@ -43,11 +43,6 @@ public interface AppointmentRepository extends MongoRepository<AppointmentFull, 
     @Update("{ '$set': { 'status': ?1 } }")
     void updateStatus(String id, AppointmentStatus status);
 
-    @Query("{ 'doctorNpi': ?0, " +
-            "  'dateTime': { $gt: new Date() }, " +
-            "  'status': { $in: ['SCHEDULED', 'PENDING', 'RESCHEDULED'] } }")
-    List<AppointmentFull> findFutureAppointmentsByDoctorNpi(String doctorNpi);
-
     // 1. LEGGE SOLO I CAMPI NECESSARI (Proiezione)
     @Query(
             value = "{ 'doctorNpi': ?0, 'dateTime': { $gt: new Date() }, 'status': { $in: ['SCHEDULED', 'PENDING', 'RESCHEDULED'] } }",
@@ -60,5 +55,18 @@ public interface AppointmentRepository extends MongoRepository<AppointmentFull, 
     @Query("{ 'doctorNpi': ?0, 'dateTime': { $gt: new Date() }, 'status': { $in: ['SCHEDULED', 'PENDING', 'RESCHEDULED'] } }")
     @Update("{ '$set': { 'location': ?1} }")
     void updateFutureAppointmentsDataBulk(String doctorNpi, Location newLocation);
+
+    @Query("{ '_id' : { $in : ?0 } }")
+    @Update("{ '$set' : { 'location' : ?1, 'doctorTelephone' : ?2 } }")
+    void updateDoctorInfoForIds(List<String> ids, Location location, String doctorTelephone);
+
+    @Query("{ 'doctorId' : ?0, 'status' : 'SCHEDULED' }")
+    @Update("{ '$set' : { 'location' : ?1, 'doctorTelephone' : ?2 } }")
+    void updateDoctorInfoBulk(String doctorId, Location location, String doctorTelephone);
+
+    // 2. Proiezione leggera per trovare quali pazienti aggiornare
+    // Restituisce solo PatientID e AppointmentID per gli appuntamenti futuri
+    @Query(value = "{ 'doctorId' : ?0, 'status' : 'SCHEDULED' }", fields = "{ 'patientId' : 1, '_id' : 1 }")
+    List<AppointmentSyncProjection> findFuturePatientIdsByDoctorId(String doctorId);
 
 }

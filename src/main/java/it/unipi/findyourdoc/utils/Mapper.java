@@ -7,7 +7,7 @@ import java.util.ArrayList;
 
 public class Mapper {
 
-    public static AppointmentPatientDTO mapToPatientDTO(AppointmentFull entity, String doctorFirstName, String doctorLastName) {
+    public static AppointmentPatientDTO mapToPatientDTO(AppointmentFull entity, String doctorFirstName, String doctorLastName, String doctorNpi) {
         AppointmentPatientDTO dto = new AppointmentPatientDTO();
 
         // 1. Dati tecnici
@@ -35,7 +35,7 @@ public class Mapper {
         dto.setDoctorSpecialties(entity.getSpecialties());
         dto.setDoctorFirstName(doctorFirstName);
         dto.setDoctorLastName(doctorLastName);
-        dto.setDoctorNpi(entity.getDoctorNpi());
+        dto.setDoctorNpi(doctorNpi);
 
         return dto;
     }
@@ -209,7 +209,6 @@ public class Mapper {
                     entity.getLocation().getZipCode()
             ));
         }
-        dto.setDoctorNpi(entity.getDoctorNpi());
         dto.setPatientTelephone(dto.getPatientTelephone());
         dto.setPatientEmail(dto.getPatientEmail());
         return dto;

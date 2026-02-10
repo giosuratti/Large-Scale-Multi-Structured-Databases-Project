@@ -63,11 +63,11 @@ public interface DoctorGraphRepository extends Neo4jRepository<DoctorNode, Strin
     );
 
 
-    @Query("MATCH (d:Doctor {NPI: $npi}) " +
-            "SET d.phone = $phone, d.city = $city")
-    void updateDoctorDataByNpi(
-            @Param("npi") String npi,
-            @Param("phone") String phone,
-            @Param("city") String city
-    );
+    // DoctorGraphRepository.java
+
+    @Query("UNWIND $updates AS row " +
+            "MATCH (d:Doctor {npi: row.npi}) " +
+            "SET d.telephone = row.telephone, d.city = row.city")
+// MODIFICA QUI: Passiamo una Lista di Mappe, che Neo4j capisce nativamente
+    void bulkUpdateDoctors(@Param("updates") List<Map<String, Object>> updates);
 }

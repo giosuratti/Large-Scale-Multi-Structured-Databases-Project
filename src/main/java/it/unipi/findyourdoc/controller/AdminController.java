@@ -264,7 +264,7 @@ public class AdminController {
         return ResponseEntity.ok("Sincronizzazione completata in " + duration + " ms. Cache invalidata.");
     }
 
-    @PostMapping("/refresh-weekly-slots")
+    /*@PostMapping("/refresh-weekly-slots")
     @ApiResponses({
             @ApiResponse(
                     responseCode = "200",
@@ -285,7 +285,7 @@ public class AdminController {
 
         long duration = System.currentTimeMillis() - start;
         return ResponseEntity.ok("Slot settimanali aggiornati con successo in " + duration + " ms.");
-    }
+    }*/
 
     @Operation(summary = "Register a new Doctor", description = "Allows an administrator to register a new doctor into the system.")
     @ApiResponses(value = {
@@ -309,7 +309,7 @@ public class AdminController {
         return ResponseEntity.ok(adminService.registerDoctor(createDTO));
     }
 
-    @Operation(
+    /*@Operation(
             summary = "Sync All Changed Doctors",
             description = "Automatically finds all doctors with 'dataUpdated=true' and syncs their phone/location across Neo4j and Appointments."
     )
@@ -319,6 +319,26 @@ public class AdminController {
         // Restituisce la lista degli NPI aggiornati correttamente
         List<String> updatedNpis = adminService.syncAllChangedDoctors();
         return ResponseEntity.ok(updatedNpis);
+    }*/
+
+    // ----------------------------------------------------------------
+    // ENDPOINT 2: Sincronizza TUTTI i dottori (Batch)
+    // ----------------------------------------------------------------
+    @PostMapping("/sync/all-doctors")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Sincronizza TUTTI i dottori (Batch)",
+            description = "Da usare preferibilmente via Cron Job notturno. Itera su tutti i dottori e aggiorna le dashboard.")
+    public ResponseEntity<String> syncAllDoctors() {
+
+        // Questo metodo dovresti implementarlo nel service ciclando su tutti i dottori
+        // oppure usando uno stream se sono tanti.
+
+        long start = System.currentTimeMillis();
+
+        adminService.syncAllDoctors();
+
+        long duration = System.currentTimeMillis() - start;
+        return ResponseEntity.ok("Sincronizzazione completata in " + duration + " ms.");
     }
 
 

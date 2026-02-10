@@ -28,8 +28,6 @@ public class AppointmentFull extends AppointmentBrief{
     @Field(targetType = FieldType.OBJECT_ID)
     @Indexed
     private String doctorId;
-    @Indexed
-    private String doctorNpi;
     private String patientFirstName;
     private String patientLastName;
     private String patientTelephone;

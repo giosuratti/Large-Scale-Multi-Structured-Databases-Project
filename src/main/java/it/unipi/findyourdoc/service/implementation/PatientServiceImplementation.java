@@ -24,9 +24,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -87,15 +84,11 @@ public class PatientServiceImplementation implements PatientService {
         Doctor doctor = doctorRepository.findById(appointmentBookDTO.getDoctorId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Dottore non trovato"));
 
-        // Normalizziamo subito la data (troncando secondi/millisecondi) per evitare problemi di match
+        // Normalizziamo subito la data
         LocalDateTime localDateTime = appointmentBookDTO.getDateTime().toLocalDateTime().truncatedTo(ChronoUnit.MINUTES);
 
         // 3. --- REDIS LOCK ---
-        boolean locked = redisSlotService.acquireSlotLock(
-                doctor.getId(),
-                localDateTime,
-                patient.getId()
-        );
+        boolean locked = redisSlotService.acquireSlotLock(doctor.getId(), localDateTime, patient.getId());
 
         if (!locked) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -103,11 +96,8 @@ public class PatientServiceImplementation implements PatientService {
         }
 
         try {
-            // 4. Double Check MongoDB (Master Collection)
-            boolean alreadyBooked = appointmentRepository.existsByDoctorIdAndDateTime(
-                    doctor.getId(),
-                    localDateTime
-            );
+            // 4. Double Check MongoDB
+            boolean alreadyBooked = appointmentRepository.existsByDoctorIdAndDateTime(doctor.getId(), localDateTime);
 
             if (alreadyBooked) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Slot già prenotato (Database).");
@@ -116,7 +106,7 @@ public class PatientServiceImplementation implements PatientService {
             // 5. Creazione Appuntamento MASTER
             AppointmentFull appointment = new AppointmentFull();
             appointment.setDoctorId(doctor.getId());
-            appointment.setDoctorNpi(doctor.getNpi());
+            // appointment.setDoctorNpi(doctor.getNpi()); // <--- RIMOSSO (Come richiesto)
             appointment.setSpecialties(doctor.getSpecialties());
             appointment.setDoctorRating(doctor.getAvgRating());
 
@@ -136,14 +126,13 @@ public class PatientServiceImplementation implements PatientService {
             // 6. Salvataggio MASTER su MongoDB
             AppointmentFull savedAppointment = appointmentRepository.save(appointment);
 
-
             // 7. AGGIORNAMENTO PAZIENTE (Embedded)
             if (patient.getBookedAppointments() == null) {
                 patient.setBookedAppointments(new ArrayList<>());
             }
 
             AppointmentPatient embeddedPatientAppt = new AppointmentPatient();
-            embeddedPatientAppt.setAppointmentId(savedAppointment.getAppointmentId());
+            embeddedPatientAppt.setAppointmentId(savedAppointment.getAppointmentId()); // Usa getId() standard
             embeddedPatientAppt.setDoctorNpi(doctor.getNpi());
             embeddedPatientAppt.setDoctorFirstName(doctor.getFirstName());
             embeddedPatientAppt.setDoctorLastName(doctor.getLastName());
@@ -154,15 +143,14 @@ public class PatientServiceImplementation implements PatientService {
             embeddedPatientAppt.setStatus(AppointmentStatus.SCHEDULED);
 
             patient.getBookedAppointments().add(embeddedPatientAppt);
-            patientRepository.save(patient); // Salvataggio esplicito Paziente
+            patientRepository.save(patient);
 
+            // 8. AGGIORNAMENTO DOTTORE (Logica Biforcata + Rimozione Slot)
 
-            // 8. AGGIORNAMENTO DOTTORE (Embedded + Rimozione Slot)
-
-            // A. Aggiungi a "Booked This Week" se rientra nei prossimi 7 giorni
             LocalDateTime now = LocalDateTime.now();
             LocalDateTime oneWeekFromNow = now.plusDays(7);
 
+            // CASO A: Appuntamento VICINO (<= 7 giorni) -> Embedded in BookedThisWeek
             if (localDateTime.isAfter(now) && localDateTime.isBefore(oneWeekFromNow)) {
                 if (doctor.getBookedThisWeek() == null) doctor.setBookedThisWeek(new ArrayList<>());
 
@@ -172,55 +160,61 @@ public class PatientServiceImplementation implements PatientService {
                 embeddedDoctorAppt.setPatientLastName(patient.getLastName());
                 embeddedDoctorAppt.setPatientTelephone(patient.getTelephone());
                 embeddedDoctorAppt.setDateTime(localDateTime);
-                embeddedDoctorAppt.setStatus(AppointmentStatus.SCHEDULED); // Importante settare lo status
+                embeddedDoctorAppt.setStatus(AppointmentStatus.SCHEDULED);
 
                 doctor.getBookedThisWeek().add(embeddedDoctorAppt);
             }
+            // CASO B: Appuntamento LONTANO (> 7 giorni) -> Solo ID in FutureAppointments
+            else if (localDateTime.isAfter(oneWeekFromNow)) {
+                if (doctor.getFutureAppointments() == null) doctor.setFutureAppointments(new ArrayList<>());
 
-            // B. RIMOZIONE SLOT "BLINDATA" (Fix per Timezone)
-            // Tronchiamo ai minuti l'orario target (es. 15:00)
-            LocalDateTime target = localDateTime.truncatedTo(ChronoUnit.MINUTES);
-
-            // Calcoliamo anche la versione UTC (es. 14:00 se siamo in inverno, 13:00 in estate)
-            // Serve perché Mongo salva in UTC e a volte Spring ricarica il dato "nudo"
-            long offsetSeconds = ZoneId.systemDefault().getRules().getOffset(target).getTotalSeconds();
-            LocalDateTime targetMinusOffset = target.minusSeconds(offsetSeconds); // Es: 15:00 -> 14:00
-            LocalDateTime targetPlusOffset = target.plusSeconds(offsetSeconds);   // Es: 15:00 -> 16:00 (Caso opposto)
-
-            // LOG DI DEBUG: Se fallisce ancora, mandami queste righe!
-            log.info("DEBUG REMOVE - Target: {} | Target-Offset: {} | DB Slots: {}",
-                    target, targetMinusOffset, doctor.getAvailableSlots());
-
-            boolean removed = doctor.getAvailableSlots().removeIf(slot -> {
-                LocalDateTime s = slot.truncatedTo(ChronoUnit.MINUTES);
-                // Proviamo a matchare:
-                // 1. L'orario esatto (15:00 == 15:00)
-                // 2. L'orario meno l'offset (14:00 == 14:00)
-                // 3. L'orario più l'offset (caso raro di errata conversione inversa)
-                return s.isEqual(target) || s.isEqual(targetMinusOffset) || s.isEqual(targetPlusOffset);
-            });
-
-            if (!removed) {
-                // Se fallisce qui, guarda i LOG sopra per capire che numeri c'erano
-                log.error("CRITICAL: Slot non trovato. Target: {}, Lista DB: {}", target, doctor.getAvailableSlots());
-                // Opzionale: Se vuoi forzare il successo anche se non trova lo slot (per evitare rollback),
-                // commenta la riga sotto. Ma meglio lasciare l'errore per coerenza.
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Lo slot non è più disponibile (Errore sync orario).");
+                // Salviamo solo l'ID (Stringa)
+                doctor.getFutureAppointments().add(savedAppointment.getAppointmentId());
             }
 
-            // C. SALVATAGGIO FINALE DOTTORE
-            // Questo salva SIA l'aggiunta nell'array bookedThisWeek SIA la rimozione dallo slot
-            doctorRepository.save(doctor); // <--- ECCO IL SALVATAGGIO CHE MANCAVA!
+            /// B. RIMOZIONE SLOT (Correzione: Ne rimuove UNO solo)
+            LocalDateTime target = localDateTime.truncatedTo(ChronoUnit.MINUTES);
 
+            // Calcolo offset
+            long offsetSeconds = ZoneId.systemDefault().getRules().getOffset(target).getTotalSeconds();
+            LocalDateTime targetMinusOffset = target.minusSeconds(offsetSeconds);
+            LocalDateTime targetPlusOffset = target.plusSeconds(offsetSeconds);
+
+            boolean removed = false;
+            Iterator<LocalDateTime> iterator = doctor.getAvailableSlots().iterator();
+
+            while (iterator.hasNext()) {
+                LocalDateTime slotRaw = iterator.next();
+                LocalDateTime slot = slotRaw.truncatedTo(ChronoUnit.MINUTES);
+
+                // Cerchiamo il match
+                boolean isExactMatch = slot.isEqual(target);
+                boolean isZoneMatch = slot.isEqual(targetMinusOffset) || slot.isEqual(targetPlusOffset);
+
+                if (isExactMatch || isZoneMatch) {
+                    iterator.remove(); // Rimuovi l'elemento corrente
+                    removed = true;
+                    log.info("Slot rimosso: {} (Target era: {})", slotRaw, target);
+                    break; // <--- FONDAMENTALE: Ci fermiamo al primo che troviamo!
+                }
+            }
+
+            if (!removed) {
+                log.error("CRITICAL: Slot non trovato. Target: {}, Lista DB: {}", target, doctor.getAvailableSlots());
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Lo slot non è più disponibile.");
+            }
+
+            // SALVATAGGIO FINALE DOTTORE (Salva: Slot rimosso + BookedThisWeek o FutureAppt aggiornati)
+            doctor.setUpdated(true); // Flag per triggerare eventuali sync futuri
+            doctorRepository.save(doctor);
 
             // 9. Invalidazione Cache
             redisTemplate.delete(DOCTOR_SLOTS_CACHE_PREFIX + doctor.getId());
             doctorService.invalidateDoctorCache(doctor.getEmail());
 
-            return Mapper.mapToPatientDTO(savedAppointment, doctor.getFirstName(), doctor.getLastName());
+            return Mapper.mapToPatientDTO(savedAppointment, doctor.getFirstName(), doctor.getLastName(), doctor.getNpi());
 
         } catch (Exception e) {
-            // Rilascio immediato del lock in caso di errore
             redisSlotService.releaseSlotLock(doctor.getId(), localDateTime);
             throw e;
         }
@@ -229,21 +223,20 @@ public class PatientServiceImplementation implements PatientService {
     @Override
     @Transactional
     public void cancelAppointment(String appointmentId) {
-        // 1. Recupero Appuntamento
+
+        // 1. Recupero Appuntamento (Summary leggero)
         AppointmentFullSummary appointment = appointmentRepository.findSummaryById(appointmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Appointment not found"));
 
-        // Check Stato
+        // 2. Controllo Stato (Non si può cancellare se già cancellato o completato)
         AppointmentStatus currentStatus = appointment.status();
-        if (currentStatus != AppointmentStatus.SCHEDULED &&
-                currentStatus != AppointmentStatus.PENDING &&
-                currentStatus != AppointmentStatus.RESCHEDULED &&
-                currentStatus != AppointmentStatus.CONFIRMED) {
+        if (currentStatus == AppointmentStatus.CANCELLED || currentStatus == AppointmentStatus.COMPLETED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Impossible to cancel: status " + currentStatus + " does not allow it.");
+                    "Impossibile cancellare: lo stato attuale è " + currentStatus);
         }
 
-        // 2. Redis Lock
+        // 3. --- REDIS LOCK ---
+        // Blocchiamo lo slot per evitare che qualcuno lo prenoti mentre lo stiamo liberando/modificando
         boolean locked = redisSlotService.acquireSlotLock(
                 appointment.doctorId(),
                 appointment.dateTime(),
@@ -251,66 +244,115 @@ public class PatientServiceImplementation implements PatientService {
         );
 
         if (!locked) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Slot currently being used.");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Operazione in corso sullo slot. Riprova tra un attimo.");
         }
-        
+
         try {
+            // 4. UPDATE MASTER COLLECTION: Set Status CANCELLED
+            appointmentRepository.updateStatus(appointmentId, AppointmentStatus.CANCELLED);
 
-            appointmentRepository.updateStatus(appointment.appointmentId(), AppointmentStatus.CANCELLED);
-            // 3. UPDATE COLLECTION 'APPOINTMENTS' (Master Data)
+            // 5. UPDATE DOCTOR (Logica Completa: Slot + Pulizia Liste)
+            Doctor doctor = doctorRepository.findById(appointment.doctorId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Doctor not found"));
 
-            // 4. UPDATE COLLECTION 'DOCTORS' -> Restore Slot
-            restoreSlotToDoctor(appointment);
+            // --- A. RIPRISTINO SLOT DISPONIBILE (Fix Timezone) ---
+            if (doctor.getAvailableSlots() == null) doctor.setAvailableSlots(new ArrayList<>());
 
-            // 5. UPDATE COLLECTION 'PATIENTS' -> Embedded List
+            // 1. Data Raw (UTC)
+            LocalDateTime rawDate = appointment.dateTime().truncatedTo(ChronoUnit.MINUTES);
+
+            // 2. Conversione a Local Time (Server Time)
+            LocalDateTime restoredSlot = rawDate.atZone(ZoneOffset.UTC)
+                    .withZoneSameInstant(ZoneId.systemDefault())
+                    .toLocalDateTime();
+
+            // 3. Aggiunta (No duplicati)
+            boolean slotExists = doctor.getAvailableSlots().stream()
+                    .anyMatch(s -> s.truncatedTo(ChronoUnit.MINUTES).isEqual(restoredSlot));
+
+            if (!slotExists) {
+                doctor.getAvailableSlots().add(restoredSlot);
+                Collections.sort(doctor.getAvailableSlots()); // Mantiene l'ordine
+                log.info("Slot ripristinato: {}", restoredSlot);
+            } else {
+                log.warn("Slot già presente, salto ripristino: {}", restoredSlot);
+            }
+
+            // --- B. RIMOZIONE DA BOOKED THIS WEEK (Dashboard) ---
+            // FONDAMENTALE: Se non lo rimuovi, il dottore vede sia lo slot libero che l'appuntamento vecchio.
+            if (doctor.getBookedThisWeek() != null) {
+                // Rimuove l'elemento se l'ID corrisponde
+                boolean removed = doctor.getBookedThisWeek().removeIf(a ->
+                        a.getAppointmentId() != null && a.getAppointmentId().equals(appointmentId)
+                );
+                if (removed) log.info("Appuntamento rimosso da bookedThisWeek");
+            }
+
+            // --- C. RIMOZIONE DA FUTURE APPOINTMENTS (Logica Professore) ---
+            // Se l'appuntamento era lontano (salvato solo come ID stringa), lo rimuoviamo da qui.
+            if (doctor.getFutureAppointments() != null) {
+                doctor.getFutureAppointments().remove(appointmentId);
+            }
+
+            // Segnaliamo che il dottore è stato modificato (utile per i sync)
+            doctor.setUpdated(true);
+
+            // SALVATAGGIO ATOMICO DEL DOTTORE
+            // Salva simultaneamente: Slot aggiunto, Rimozione da Booked, Rimozione da Future
+            doctorRepository.save(doctor);
+
+
+            // 6. UPDATE PATIENT (Uso del tuo metodo helper esistente)
             updatePatientEmbeddedList(appointment);
 
-            // 6. UPDATE COLLECTION 'DOCTORS' -> Embedded List (bookedThisWeek) <--- NUOVO!
-            updateDoctorBookedThisWeek(appointment);
 
-            // 7. REDIS: Invalida Slot
+            // 7. INVALIDAZIONE CACHE
+            // A. Slot Pubblici
             redisTemplate.delete(DOCTOR_SLOTS_CACHE_PREFIX + appointment.doctorId());
 
-            // 8. REDIS: Invalida Cache Profilo Dottore (dove c'è bookedThisWeek)
-            Doctor doctor = doctorRepository.findById(appointment.doctorId()).orElse(null);
-            if (doctor != null) {
-                doctorService.invalidateDoctorCache(doctor.getEmail());
-            }
+            // B. Profilo Dottore (Dashboard)
+            doctorService.invalidateDoctorCache(doctor.getEmail());
 
-            // 9. REDIS: Invalida Cache Paziente
-            Patient patient = patientRepository.findById(appointment.patientId()).orElse(null);
-            if (patient != null) {
-                redisTemplate.delete("patient_appointments::" + patient.getEmail());
-            }
+            // C. Appuntamenti Paziente (Opzionale, se hai l'email nel summary)
+            // if (appointment.patientEmail() != null) {
+            //    redisTemplate.delete("patient_appointments::" + appointment.patientEmail());
+            // }
 
         } catch (Exception e) {
+            // Rilascia lock in caso di errore
             redisSlotService.releaseSlotLock(appointment.doctorId(), appointment.dateTime());
             throw e;
         }
 
+        // Rilascia lock in caso di successo
         redisSlotService.releaseSlotLock(appointment.doctorId(), appointment.dateTime());
     }
 
-    // --- Helper 1: Aggiorna lista Paziente ---
+    // IL TUO METODO HELPER (Incluso per completezza)
     private void updatePatientEmbeddedList(AppointmentFullSummary appointment) {
         patientRepository.findById(appointment.patientId()).ifPresent(patient -> {
             if (patient.getBookedAppointments() != null) {
                 boolean updated = false;
                 for (var embeddedAppt : patient.getBookedAppointments()) {
-                    // Confrontiamo gli ID (Assicurati che embeddedAppt abbia appointmentId)
+                    // Confrontiamo gli ID
                     if (embeddedAppt.getAppointmentId().equals(appointment.appointmentId())) {
                         embeddedAppt.setStatus(AppointmentStatus.CANCELLED);
                         updated = true;
                         break;
                     }
                 }
-                if (updated) patientRepository.save(patient);
+                if (updated) {
+                    patientRepository.save(patient);
+                    // Opzionale: Se vuoi invalidare la cache paziente qui dentro
+                    // redisTemplate.delete("patient_appointments::" + patient.getEmail());
+                }
             }
         });
     }
 
     // --- Helper 2: Aggiorna lista Dottore (bookedThisWeek) ---
-    private void updateDoctorBookedThisWeek(AppointmentFullSummary appointment) {
+    /*private void updateDoctorBookedThisWeek(AppointmentFullSummary appointment) {
         doctorRepository.findById(appointment.doctorId()).ifPresent(doctor -> {
             // Controlliamo se la lista esiste e non è vuota
             if (doctor.getBookedThisWeek() != null && !doctor.getBookedThisWeek().isEmpty()) {
@@ -332,7 +374,7 @@ public class PatientServiceImplementation implements PatientService {
                 }
             }
         });
-    }
+    }*/
 
     @Override
 
@@ -361,7 +403,7 @@ public class PatientServiceImplementation implements PatientService {
 
     // Assicurati di averlo iniettato
 
-    private void removeSlotFromDoctorAvailability(Doctor doctor, LocalDateTime slotTime) {
+    /*private void removeSlotFromDoctorAvailability(Doctor doctor, LocalDateTime slotTime) {
         Query query = Query.query(Criteria.where("_id").is(doctor.getId()));
 
         // TRUCCO: Convertiamo il LocalDateTime in Date forzando la zona UTC.
@@ -381,7 +423,7 @@ public class PatientServiceImplementation implements PatientService {
         } else {
             System.err.println("❌ Slot NON rimosso. Verifica ancora la data nel DB.");
         }
-    }
+    }*/
 
     private void restoreSlotToDoctor(AppointmentFullSummary appointment) {
         Doctor doctor = doctorRepository.findById(appointment.doctorId())

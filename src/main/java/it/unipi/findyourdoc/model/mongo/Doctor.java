@@ -9,6 +9,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
 
 @EqualsAndHashCode(callSuper = false)
 @Data
@@ -17,11 +18,11 @@ import java.util.ArrayList;
 @Document(collection = "doctors")
 
 @CompoundIndex(name = "idx_npi_avgRating_ratingCount", def = "{'npi': 1, 'avgRating': 1, 'ratingCount': 1}")
-@CompoundIndex(
+/*@CompoundIndex(
         name = "idx_npi_telephone_location_updated_partial",
         def = "{'npi': 1, 'telephone': 1, 'location': 1}",
         partialFilter = "{'updated': true}"
-)
+)*/
 public class Doctor extends User {
 
     private String firstName;
@@ -40,4 +41,6 @@ public class Doctor extends User {
     private Integer totalAppointments;
     private String gender;
     private Boolean updated;
+
+    private ArrayList<String> futureAppointments;
 }
