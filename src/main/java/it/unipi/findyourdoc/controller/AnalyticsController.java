@@ -2,11 +2,14 @@ package it.unipi.findyourdoc.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import it.unipi.findyourdoc.dto.mongo.CancellationStatsDTO;
 import it.unipi.findyourdoc.dto.mongo.DiagnosisAnalyticsDTO;
-import it.unipi.findyourdoc.dto.mongo.RatingCorrelationDTO;
 import it.unipi.findyourdoc.dto.mongo.SymptomCountDTO;
 import it.unipi.findyourdoc.service.AnalyticsService;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -16,7 +19,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/analytics")
@@ -27,27 +29,41 @@ public class AnalyticsController {
 
     private final AnalyticsService analyticsService;
 
-    @Operation(summary = "Most reported symptoms in an area")
+    @Operation(summary = "Most reported symptoms in an area (Paginated)")
     @GetMapping("/symptoms/top")
-    public ResponseEntity<List<SymptomCountDTO>> getTopSymptoms(
+    public ResponseEntity<Page<SymptomCountDTO>> getTopSymptoms(
             @RequestParam String city,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
-        return ResponseEntity.ok(analyticsService.getMostReportedSymptoms(city, start, end));
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end,
+            @ParameterObject Pageable pageable) { // @ParameterObject è utile per Swagger/OpenAPI
+
+        return ResponseEntity.ok(analyticsService.getMostReportedSymptoms(city, start, end, pageable));
     }
 
-    @Operation(summary = "Correlation between ratings and appointments")
+    /*@Operation(summary = "Correlation between ratings and appointments")
     @GetMapping("/correlation/rating-appointments")
     public ResponseEntity<List<RatingCorrelationDTO>> getRatingCorrelation() {
         return ResponseEntity.ok(analyticsService.getRatingAppointmentCorrelation());
-    }
+    }*/
 
     @Operation(summary = "Diagnosis frequency by age and gender")
     @GetMapping("/diagnoses/demographic")
-    public ResponseEntity<List<DiagnosisAnalyticsDTO>> getDiagnosisByDemographic(
+    public ResponseEntity<Page<DiagnosisAnalyticsDTO>> getDiagnosisByDemographic(
             @RequestParam int minAge,
             @RequestParam int maxAge,
-            @RequestParam String gender) {
-        return ResponseEntity.ok(analyticsService.getDiagnosisAnalytics(minAge, maxAge, gender));
+            @RequestParam String gender,
+            @ParameterObject Pageable pageable) {
+        return ResponseEntity.ok(analyticsService.getDiagnosisAnalytics(minAge, maxAge, gender, pageable));
+    }
+
+    @Operation(summary = "Top specializations by cancellations (Paginated)",
+            description = "Classifica paginata delle specializzazioni con più visite cancellate.")
+    @GetMapping("/specializations/cancelled/top")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Page<CancellationStatsDTO>> getTopCancelledSpecializations(
+            @ParameterObject Pageable pageable // @ParameterObject rende Swagger felice
+    ) {
+
+        return ResponseEntity.ok(analyticsService.getTopCancelledSpecializations(pageable));
     }
 }
