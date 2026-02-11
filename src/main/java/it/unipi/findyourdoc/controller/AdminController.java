@@ -264,29 +264,6 @@ public class AdminController {
         return ResponseEntity.ok("Sincronizzazione completata in " + duration + " ms. Cache invalidata.");
     }
 
-    /*@PostMapping("/refresh-weekly-slots")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "Weekly slots refreshed successfully",
-                    content = @Content(
-                            mediaType = "text/plain",
-                            schema = @Schema(type = "string")
-                    )
-            ),
-            @ApiResponse(responseCode = "401", description = "Unauthorized"),
-            @ApiResponse(responseCode = "403", description = "Forbidden")
-    })
-    @PreAuthorize("hasRole('ADMIN')") // Solo l'admin può lanciarlo
-    public ResponseEntity<String> refreshWeeklySlots() {
-        long start = System.currentTimeMillis();
-
-        adminService.refreshWeeklySlots();
-
-        long duration = System.currentTimeMillis() - start;
-        return ResponseEntity.ok("Slot settimanali aggiornati con successo in " + duration + " ms.");
-    }*/
-
     @Operation(summary = "Register a new Doctor", description = "Allows an administrator to register a new doctor into the system.")
     @ApiResponses(value = {
             @ApiResponse(

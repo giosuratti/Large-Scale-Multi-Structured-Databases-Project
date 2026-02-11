@@ -16,6 +16,7 @@ public interface DoctorRepository extends UserRepository<Doctor>{
     // Questo metodo serve al JwtTokenProvider per validare il dottore
     // boolean existsByEmail(String email);
     // void deleteByEmail(String email);
+    @Query(value = "{}", fields = "{ 'npi': 1, 'avgRating': 1, 'ratingCount': 1, '_id': 0 }", hint = "idx_npi_avgRating_ratingCount")
     List<DoctorProjection> findAllBy();
     boolean existsByNpi(String npi);
     Optional<Doctor> findByNpi(String npi);

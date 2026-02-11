@@ -40,11 +40,6 @@ public class AnalyticsController {
         return ResponseEntity.ok(analyticsService.getMostReportedSymptoms(city, start, end, pageable));
     }
 
-    /*@Operation(summary = "Correlation between ratings and appointments")
-    @GetMapping("/correlation/rating-appointments")
-    public ResponseEntity<List<RatingCorrelationDTO>> getRatingCorrelation() {
-        return ResponseEntity.ok(analyticsService.getRatingAppointmentCorrelation());
-    }*/
 
     @Operation(summary = "Diagnosis frequency by age and gender")
     @GetMapping("/diagnoses/demographic")

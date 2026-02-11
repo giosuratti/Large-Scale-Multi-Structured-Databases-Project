@@ -5,11 +5,12 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.List;
 
 @EqualsAndHashCode(callSuper = false)
 @Data
@@ -17,17 +18,20 @@ import java.util.List;
 @AllArgsConstructor
 @Document(collection = "doctors")
 
-@CompoundIndex(name = "idx_npi_avgRating_ratingCount", def = "{'npi': 1, 'avgRating': 1, 'ratingCount': 1}")
-/*@CompoundIndex(
-        name = "idx_npi_telephone_location_updated_partial",
-        def = "{'npi': 1, 'telephone': 1, 'location': 1}",
-        partialFilter = "{'updated': true}"
-)*/
+@CompoundIndexes({
+        @CompoundIndex(name = "idx_npi_avgRating_ratingCount", def = "{'npi': 1, 'avgRating': 1, 'ratingCount': 1}")
+        /*@CompoundIndex(
+                name = "idx_npi_telephone_location_updated_partial",
+                def = "{'npi': 1, 'telephone': 1, 'location': 1}",
+                partialFilter = "{'updated': true}"
+        )*/
+})
 public class Doctor extends User {
 
     private String firstName;
     private String lastName;
 
+    @Indexed(unique = true)
     private String npi;
 
     private ArrayList<String> specialties;
