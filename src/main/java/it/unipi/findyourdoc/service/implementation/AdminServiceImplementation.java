@@ -333,7 +333,7 @@ public class AdminServiceImplementation implements AdminService {
 
         try {
             doctorGraphRepository.createDoctorAndRelations(
-                    savedDoctor.getId(),
+                    savedDoctor.getNpi(),
                     savedDoctor.getFirstName(),
                     savedDoctor.getLastName(),
                     savedDoctor.getGender(),

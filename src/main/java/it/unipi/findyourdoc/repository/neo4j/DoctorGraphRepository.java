@@ -40,7 +40,7 @@ public interface DoctorGraphRepository extends Neo4jRepository<DoctorNode, Strin
             "d.ratingCount = row.ratingCount")
     void bulkUpdateRatings(@Param("updates") List<Map<String, Object>> updates);
 
-    @Query("MERGE (d:Doctor {id: $id}) " +
+    @Query("MERGE (d:Doctor {NPI: $npi}) " +
             "SET d.firstName = $firstName, " +
             "    d.lastName = $lastName, " +
             "    d.city = $city, " +
@@ -52,7 +52,7 @@ public interface DoctorGraphRepository extends Neo4jRepository<DoctorNode, Strin
             "MATCH (s:Specialization {name: specName}) " +
             "MERGE (s)-[:HAS_DOCTOR]->(d)")
     void createDoctorAndRelations(
-            @Param("id") String id,
+            @Param("npi") String npi,
             @Param("firstName") String firstName,
             @Param("lastName") String lastName,
             @Param("gender") String gender,
@@ -66,7 +66,7 @@ public interface DoctorGraphRepository extends Neo4jRepository<DoctorNode, Strin
     // DoctorGraphRepository.java
 
     @Query("UNWIND $updates AS row " +
-            "MATCH (d:Doctor {npi: row.npi}) " +
+            "MATCH (d:Doctor {NPI: row.npi}) " +
             "SET d.telephone = row.telephone, d.city = row.city")
 // MODIFICA QUI: Passiamo una Lista di Mappe, che Neo4j capisce nativamente
     void bulkUpdateDoctors(@Param("updates") List<Map<String, Object>> updates);
