@@ -205,11 +205,11 @@ public class PatientServiceImplementation implements PatientService {
             }
 
             // SALVATAGGIO FINALE DOTTORE (Salva: Slot rimosso + BookedThisWeek o FutureAppt aggiornati)
-            doctor.setUpdated(true); // Flag per triggerare eventuali sync futuri
             doctorRepository.save(doctor);
 
             // 9. Invalidazione Cache
             redisTemplate.delete(DOCTOR_SLOTS_CACHE_PREFIX + doctor.getId());
+            redisSlotService.releaseSlotLock(doctor.getId(), localDateTime);
             doctorService.invalidateDoctorCache(doctor.getEmail());
 
             return Mapper.mapToPatientDTO(savedAppointment, doctor.getFirstName(), doctor.getLastName(), doctor.getNpi());
@@ -377,7 +377,7 @@ public class PatientServiceImplementation implements PatientService {
     }*/
 
     @Override
-
+    @Cacheable(value = "patient_appointments", key = "#email")
     public Page<AppointmentPatientDTO> getAppointmentsByEmail(String email, Pageable pageable) {
         // Recuperiamo il documento paziente intero
         Patient patient = patientRepository.findByEmail(email)
