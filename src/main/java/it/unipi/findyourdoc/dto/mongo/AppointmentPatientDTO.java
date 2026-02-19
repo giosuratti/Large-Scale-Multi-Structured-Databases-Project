@@ -10,39 +10,45 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 
 /**
- * DTO per la visualizzazione dell'appuntamento dal punto di vista del Paziente.
- * Utilizzato tipicamente nella lista "I miei appuntamenti".
+ * DTO for the patient-facing view of an appointment.
+ * Optimized for the "My Appointments" personal dashboard.
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "DTO sintetico dell'appuntamento per la visualizzazione lato paziente.")
+@Schema(description = "Synthetic appointment DTO for patient-side visualization.")
 public class AppointmentPatientDTO {
 
-    @Schema(description = "ID univoco dell'appuntamento", example = "1024")
+    /** * Unique identifier for the appointment document. */
+    @Schema(description = "Unique identifier of the appointment", example = "60d5ecb54f1a2c0015f8e9a1")
     private String id;
 
-    @Schema(description = "Data e ora dell'appuntamento", example = "2026-05-15T10:30:00")
+    /** * Scheduled visit timestamp. */
+    @Schema(description = "Date and time of the appointment", example = "2026-05-15T10:30:00")
     private LocalDateTime dateTime;
 
-    @Schema(description = "Stato dell'appuntamento (es. PENDING, CONFIRMED, CANCELLED)", example = "CONFIRMED")
+    /** * Current lifecycle state. */
+    @Schema(description = "Status of the appointment (e.g., PENDING, CONFIRMED, CANCELLED)", example = "CONFIRMED")
     private AppointmentStatus status;
 
-    
-    // --- Informazioni sul Medico ---
-    @Schema(description = "ID del medico (utile per link al profilo)", example = "501")
+    // --- Doctor Metadata ---
+
+    /** * National Provider Identifier used for profile cross-linking. */
+    @Schema(description = "Doctor's NPI (useful for profile linking)", example = "47386543")
     private String doctorNpi;
 
-    @Schema(description = "Nome del medico", example = "Giulia")
+    @Schema(description = "Doctor's first name", example = "Giulia")
     private String doctorFirstName;
 
-    @Schema(description = "Cognome del medico", example = "Bianchi")
+    @Schema(description = "Doctor's last name", example = "Bianchi")
     private String doctorLastName;
 
-    @Schema(description = "Specializzazioni del medico", example = "['Cardiologia']")
+    @Schema(description = "Doctor's medical specialties", example = "['Cardiology']")
     private ArrayList<String> doctorSpecialties;
 
-    // --- Luogo della visita ---
-    @Schema(description = "Indirizzo dello studio medico")
+    // --- Facility Details ---
+
+    /** * Medical office physical address. */
+    @Schema(description = "Address of the medical office")
     private LocationDTO location;
 }

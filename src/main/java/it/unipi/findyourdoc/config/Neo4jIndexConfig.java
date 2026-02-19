@@ -6,17 +6,24 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Configuration class to initialize Neo4j schema constraints and indexes on startup.
+ */
 @Configuration
 public class Neo4jIndexConfig {
 
+    /**
+     * Executes Cypher commands to ensure data integrity and lookup performance.
+     * * @param driver The Neo4j driver bean.
+     * @return A CommandLineRunner that executes the index/constraint creation.
+     */
     @Bean
     public CommandLineRunner createNeo4jIndexes(Driver driver) {
         return args -> {
             try (Session session = driver.session()) {
 
-                // DOCTOR UNIQUE CONSTRAINT ON NPI (RECOMMENDED)
-                // This creates an automatic index for fast lookups (critical for sync)
-                // AND guarantees that we never have duplicate doctor nodes in the graph.
+                // Enforces NPI uniqueness at the database level to prevent node duplication.
+                // Implicitly creates a B-Tree index for O(log n) lookups during data synchronization.
                 session.run("CREATE CONSTRAINT constraint_doctor_npi IF NOT EXISTS FOR (d:Doctor) REQUIRE d.NPI IS UNIQUE");
 
                 System.out.println("Neo4j indexes (Disease, Symptom, Doctor NPI) verified/created successfully.");

@@ -6,9 +6,7 @@ import it.unipi.findyourdoc.dto.mongo.DiagnosisAnalyticsDTO;
 import it.unipi.findyourdoc.dto.mongo.SymptomCountDTO;
 import it.unipi.findyourdoc.service.AnalyticsService;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -27,17 +25,20 @@ import java.util.List;
 
 import static org.springframework.data.mongodb.core.aggregation.Aggregation.*;
 
+/**
+ * Service implementation for complex data analytics using MongoDB Aggregation Framework.
+ * Configured to use secondary nodes for read operations to preserve primary node performance.
+ */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AnalyticsServiceImplementation implements AnalyticsService {
-    private static final Logger log = LoggerFactory.getLogger(DoctorServiceImplementation.class);
 
-    @Autowired
-    private MongoTemplate mongoTemplate;
+    private final MongoTemplate mongoTemplate;
 
     /**
-     * Helper per creare opzioni di aggregazione che leggono dai secondari.
-     * Evita di ripetere il codice in ogni metodo.
+     * Configures aggregation to prefer reading from secondary replica set members.
+     * Essential for offloading heavy analytics workloads from the primary node.
      */
     private AggregationOptions getSecondaryReadOptions() {
         return AggregationOptions.builder()
@@ -45,17 +46,25 @@ public class AnalyticsServiceImplementation implements AnalyticsService {
                 .build();
     }
 
+    /**
+     * Aggregates symptom frequency based on location and time range.
+     * Uses $unwind to deconstruct symptom arrays for accurate counting.
+     */
     @Override
     public Page<SymptomCountDTO> getMostReportedSymptoms(String city, LocalDateTime start, LocalDateTime end, Pageable pageable) {
-
         List<AggregationOperation> baseOperations = new ArrayList<>();
 
+        // 1. Filter reports by city and date range
         baseOperations.add(match(Criteria.where("patientLocation").is(city)
                 .and("createdAt").gte(start).lte(end)));
+        // 2. Deconstruct the symptoms array into individual documents
         baseOperations.add(unwind("symptoms"));
+        // 3. Group by symptom name and count occurrences
         baseOperations.add(group("symptoms").count().as("count"));
+        // 4. Rename fields for DTO compatibility
         baseOperations.add(project("count").and("_id").as("symptom"));
 
+        // Handle sorting
         if (pageable.getSort().isSorted()) {
             baseOperations.add(sort(pageable.getSort()));
         } else {
@@ -64,60 +73,54 @@ public class AnalyticsServiceImplementation implements AnalyticsService {
 
         List<AggregationOperation> dataPipeline = new ArrayList<>(baseOperations);
 
+        // Pagination: Skip and Limit
         if (pageable.isPaged()) {
             dataPipeline.add(skip((long) pageable.getPageNumber() * pageable.getPageSize()));
             dataPipeline.add(limit(pageable.getPageSize()));
         }
 
-        // --- APPLICAZIONE READ PREFERENCE (Secondary Preferred) ---
-        Aggregation aggregation = Aggregation.newAggregation(dataPipeline)
-                .withOptions(getSecondaryReadOptions()); // <--- QUI
-
-        AggregationResults<SymptomCountDTO> results = mongoTemplate.aggregate(
-                aggregation, "symptom_reports", SymptomCountDTO.class
-        );
-
-        List<SymptomCountDTO> dataList = results.getMappedResults();
+        Aggregation aggregation = Aggregation.newAggregation(dataPipeline).withOptions(getSecondaryReadOptions());
+        AggregationResults<SymptomCountDTO> results = mongoTemplate.aggregate(aggregation, "symptom_reports", SymptomCountDTO.class);
 
         return PageableExecutionUtils.getPage(
-                dataList,
+                results.getMappedResults(),
                 pageable,
                 () -> countTotalSymptoms(city, start, end)
         );
     }
 
+    /**
+     * Counts unique symptom groups to support pagination.
+     */
     private long countTotalSymptoms(String city, LocalDateTime start, LocalDateTime end) {
         Aggregation countAggregation = Aggregation.newAggregation(
-                match(Criteria.where("patientLocation").is(city)
-                        .and("createdAt").gte(start).lte(end)),
+                match(Criteria.where("patientLocation").is(city).and("createdAt").gte(start).lte(end)),
                 unwind("symptoms"),
                 group("symptoms"),
                 count().as("total")
-        ).withOptions(getSecondaryReadOptions()); // <--- ANCHE QUI SUL COUNT
+        ).withOptions(getSecondaryReadOptions());
 
-        AggregationResults<org.bson.Document> countResults = mongoTemplate.aggregate(
-                countAggregation, "symptom_reports", org.bson.Document.class
-        );
-
-        return countResults.getMappedResults().size();
+        return mongoTemplate.aggregate(countAggregation, "symptom_reports", org.bson.Document.class)
+                .getMappedResults().size();
     }
 
+    /**
+     * Analyzes diagnosis frequency filtered by demographics (age range and gender).
+     */
     @Override
     public Page<DiagnosisAnalyticsDTO> getDiagnosisAnalytics(Integer minAge, Integer maxAge, String gender, Pageable pageable) {
-
-        log.info("Calculating Diagnosis Analytics for range {}-{}, gender {}, page {}", minAge, maxAge, gender, pageable.getPageNumber());
+        log.info("Analyzing diagnoses for age {}-{} and gender {}", minAge, maxAge, gender);
 
         Criteria criteria = new Criteria();
-        if (minAge != null && maxAge != null) {
-            criteria.and("patientAge").gte(minAge).lte(maxAge);
-        }
-        if (gender != null && !gender.isEmpty() && !"ALL".equalsIgnoreCase(gender)) {
-            criteria.and("patientGender").is(gender);
-        }
+        if (minAge != null && maxAge != null) criteria.and("patientAge").gte(minAge).lte(maxAge);
+        if (gender != null && !"ALL".equalsIgnoreCase(gender)) criteria.and("patientGender").is(gender);
 
         List<AggregationOperation> baseOperations = new ArrayList<>();
+        // 1. Filter by patient demographics
         baseOperations.add(match(criteria));
+        // 2. Deconstruct the diagnosis array
         baseOperations.add(unwind("possibleDiagnosies"));
+        // 3. Count occurrences per diagnosis
         baseOperations.add(group("possibleDiagnosies").count().as("count"));
 
         List<AggregationOperation> dataPipeline = new ArrayList<>(baseOperations);
@@ -128,42 +131,26 @@ public class AnalyticsServiceImplementation implements AnalyticsService {
             dataPipeline.add(sort(Sort.Direction.DESC, "count"));
         }
 
-        dataPipeline.add(project()
-                .and("_id").as("diagnosis")
-                .and("count").as("frequency")
-                .andExclude("_id"));
+        dataPipeline.add(project().and("_id").as("diagnosis").and("count").as("frequency").andExclude("_id"));
 
         if (pageable.isPaged()) {
             dataPipeline.add(skip((long) pageable.getPageNumber() * pageable.getPageSize()));
             dataPipeline.add(limit(pageable.getPageSize()));
         }
 
-        // --- APPLICAZIONE READ PREFERENCE ---
-        Aggregation dataAggregation = newAggregation(dataPipeline)
-                .withOptions(getSecondaryReadOptions()); // <--- QUI
-
-        AggregationResults<DiagnosisAnalyticsDTO> results = mongoTemplate.aggregate(
-                dataAggregation,
-                "symptom_reports",
-                DiagnosisAnalyticsDTO.class
-        );
+        Aggregation dataAggregation = newAggregation(dataPipeline).withOptions(getSecondaryReadOptions());
+        AggregationResults<DiagnosisAnalyticsDTO> results = mongoTemplate.aggregate(dataAggregation, "symptom_reports", DiagnosisAnalyticsDTO.class);
 
         return PageableExecutionUtils.getPage(
                 results.getMappedResults(),
                 pageable,
                 () -> {
+                    // Count unique diagnosis groups for pagination
                     List<AggregationOperation> countPipeline = new ArrayList<>(baseOperations);
                     countPipeline.add(count().as("total"));
 
-                    // --- APPLICAZIONE READ PREFERENCE SUL COUNT ---
-                    Aggregation countAggregation = newAggregation(countPipeline)
-                            .withOptions(getSecondaryReadOptions()); // <--- QUI
-
                     AggregationResults<org.bson.Document> countResult = mongoTemplate.aggregate(
-                            countAggregation,
-                            "symptom_reports",
-                            org.bson.Document.class
-                    );
+                            newAggregation(countPipeline).withOptions(getSecondaryReadOptions()), "symptom_reports", org.bson.Document.class);
 
                     org.bson.Document uniqueResult = countResult.getUniqueMappedResult();
                     return uniqueResult != null ? ((Number) uniqueResult.get("total")).longValue() : 0L;
@@ -171,13 +158,20 @@ public class AnalyticsServiceImplementation implements AnalyticsService {
         );
     }
 
+    /**
+     * Calculates cancellation statistics per specialization.
+     * Includes metrics for total cancellations, average patient age, and average doctor rating.
+     */
     @Override
     public Page<CancellationStatsDTO> getTopCancelledSpecializations(Pageable pageable) {
-
         List<AggregationOperation> basePipeline = new ArrayList<>();
-        basePipeline.add(Aggregation.match(Criteria.where("status").is("CANCELLED")));
-        basePipeline.add(Aggregation.unwind("specialties"));
-        basePipeline.add(Aggregation.group("specialties")
+
+        // 1. Filter only cancelled appointments
+        basePipeline.add(match(Criteria.where("status").is("CANCELLED")));
+        // 2. Deconstruct specialties array
+        basePipeline.add(unwind("specialties"));
+        // 3. Aggregate totals and averages (age and rating) per specialization
+        basePipeline.add(group("specialties")
                 .count().as("totalCancelled")
                 .avg("patientAge").as("avgPatientAge")
                 .avg("doctorRating").as("avgDoctorRating")
@@ -185,7 +179,8 @@ public class AnalyticsServiceImplementation implements AnalyticsService {
 
         List<AggregationOperation> dataPipeline = new ArrayList<>(basePipeline);
 
-        dataPipeline.add(Aggregation.project()
+        // 4. Project results and round numeric values for the DTO
+        dataPipeline.add(project()
                 .and("_id").as("specialization")
                 .and("totalCancelled").as("totalCancelled")
                 .andExpression("round(avgPatientAge, 1)").as("avgPatientAge")
@@ -193,38 +188,31 @@ public class AnalyticsServiceImplementation implements AnalyticsService {
         );
 
         if (pageable.getSort().isSorted()) {
-            dataPipeline.add(Aggregation.sort(pageable.getSort()));
+            dataPipeline.add(sort(pageable.getSort()));
         } else {
-            dataPipeline.add(Aggregation.sort(Sort.Direction.DESC, "totalCancelled"));
+            dataPipeline.add(sort(Sort.Direction.DESC, "totalCancelled"));
         }
 
         if (pageable.isPaged()) {
-            dataPipeline.add(Aggregation.skip((long) pageable.getPageNumber() * pageable.getPageSize()));
-            dataPipeline.add(Aggregation.limit(pageable.getPageSize()));
+            dataPipeline.add(skip((long) pageable.getPageNumber() * pageable.getPageSize()));
+            dataPipeline.add(limit(pageable.getPageSize()));
         }
 
-        // --- APPLICAZIONE READ PREFERENCE ---
-        Aggregation aggregation = Aggregation.newAggregation(dataPipeline)
-                .withOptions(getSecondaryReadOptions()); // <--- QUI
-
-        AggregationResults<CancellationStatsDTO> results = mongoTemplate.aggregate(
-                aggregation, "appointments", CancellationStatsDTO.class
-        );
+        Aggregation aggregation = Aggregation.newAggregation(dataPipeline).withOptions(getSecondaryReadOptions());
+        AggregationResults<CancellationStatsDTO> results = mongoTemplate.aggregate(aggregation, "appointments", CancellationStatsDTO.class);
 
         return PageableExecutionUtils.getPage(
                 results.getMappedResults(),
                 pageable,
                 () -> {
+                    // Count unique specialization groups affected by cancellations
                     List<AggregationOperation> countPipeline = new ArrayList<>();
-                    countPipeline.add(Aggregation.match(Criteria.where("status").is("CANCELLED")));
-                    countPipeline.add(Aggregation.unwind("specialties"));
-                    countPipeline.add(Aggregation.group("specialties"));
+                    countPipeline.add(match(Criteria.where("status").is("CANCELLED")));
+                    countPipeline.add(unwind("specialties"));
+                    countPipeline.add(group("specialties"));
 
-                    // --- APPLICAZIONE READ PREFERENCE SUL COUNT ---
-                    Aggregation countAgg = Aggregation.newAggregation(countPipeline)
-                            .withOptions(getSecondaryReadOptions()); // <--- QUI
-
-                    return (long) mongoTemplate.aggregate(countAgg, "appointments", org.bson.Document.class)
+                    Aggregation countAgg = newAggregation(countPipeline).withOptions(getSecondaryReadOptions());
+                    return mongoTemplate.aggregate(countAgg, "appointments", org.bson.Document.class)
                             .getMappedResults().size();
                 }
         );

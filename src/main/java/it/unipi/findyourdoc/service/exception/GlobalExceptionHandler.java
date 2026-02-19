@@ -1,7 +1,6 @@
 package it.unipi.findyourdoc.service.exception;
 
-import java.util.HashMap;
-import java.util.Map;
+import it.unipi.findyourdoc.repository.exception.RepositoryException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -13,16 +12,20 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
-import it.unipi.findyourdoc.repository.exception.RepositoryException;
+
+import java.util.HashMap;
+import java.util.Map;
+
 /**
- * Centralized exception handler for FindYourDoc API.
- * Converts internal exceptions into standard JSON responses.
+ * Centralized exception handler for the FindYourDoc API.
+ * Intercepts internal exceptions and converts them into standardized, client-friendly JSON responses.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     /**
-     * Gestisce le eccezioni del Database (Repository).
+     * Intercepts database and persistence layer failures.
+     * Prevents internal query structures from leaking to the frontend.
      */
     @ExceptionHandler(RepositoryException.class)
     public ResponseEntity<Map<String, String>> handleRepositoryException(RepositoryException ex) {
@@ -33,7 +36,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Gestisce le ResponseStatusException (usate nei nostri Service per 404, 400, ecc.).
+     * Handles standard HTTP status exceptions explicitly thrown by the business logic (e.g., 404 Not Found).
      */
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, String>> handleResponseStatusException(ResponseStatusException ex) {
@@ -44,7 +47,8 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Gestisce gli errori di validazione dei DTO (@Valid nelle RequestBody).
+     * Processes DTO validation failures triggered by @Valid annotations.
+     * Maps specific field errors to a structured dictionary for the client UI.
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleDtoValidationException(MethodArgumentNotValidException ex) {
@@ -61,7 +65,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Gestisce errori di tipo nei parametri (es. mandare una stringa dove serve un numero).
+     * Catches type mismatches in request parameters or path variables.
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<Map<String, String>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
@@ -73,7 +77,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Gestisce errori di sicurezza (Accesso negato/Ruolo mancante).
+     * Intercepts authorization failures when an authenticated user attempts an action outside their role scope.
      */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, String>> handleAccessDeniedException(AccessDeniedException ex) {
@@ -84,7 +88,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Gestisce errori di autenticazione (Login fallito).
+     * Handles authentication failures, such as invalid email/password combinations during login.
      */
     @ExceptionHandler({BadCredentialsException.class, AuthenticationException.class})
     public ResponseEntity<Map<String, String>> handleAuthException(Exception ex) {
@@ -95,14 +99,14 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Fallback per qualsiasi altro errore imprevisto.
+     * Fallback handler for any uncaught runtime exceptions to ensure the API never returns a raw HTML error page.
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> handleGenericException(Exception ex) {
         Map<String, String> response = new HashMap<>();
         response.put("error", "Internal Server Error");
-        response.put("details", ex.getMessage());
-        // Loggare l'eccezione qui per debug interno
+        response.put("details", "An unexpected error occurred.");
+        // Note: The raw exception message is hidden from the client in production for security.
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }
 }

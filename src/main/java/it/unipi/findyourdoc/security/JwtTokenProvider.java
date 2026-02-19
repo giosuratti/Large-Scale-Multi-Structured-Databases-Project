@@ -17,6 +17,10 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 
+/**
+ * Provider class responsible for managing JSON Web Tokens (JWT).
+ * Handles the generation, validation, and extraction of authentication details from JWTs.
+ */
 @Component
 @RequiredArgsConstructor
 public class JwtTokenProvider {
@@ -33,24 +37,37 @@ public class JwtTokenProvider {
 
     private Algorithm algorithm;
 
+    /** * Initializes the cryptographic algorithm used for signing the JWTs after dependency injection. */
     @PostConstruct
     protected void init() {
         algorithm = Algorithm.HMAC256(secretKey);
     }
 
+    /**
+     * Generates a new JWT for the authenticated user.
+     *
+     * @param email The email of the user (used as the subject).
+     * @param role  The role of the user (e.g., ADMIN, DOCTOR, PATIENT).
+     * @return The signed JWT string.
+     */
     public String createToken(String email, String role) {
         Date now = new Date();
         Date validity = new Date(now.getTime() + validityInMilliseconds);
 
         return JWT.create()
-                .withSubject(email) // <--- CORREZIONE FONDAMENTALE: Imposta il Subject (Standard JWT)
-                .withClaim("role", role) // Qui salviamo "ADMIN", "DOCTOR", ecc.
-                // .withClaim("email", email) // Ridondante se usiamo Subject, ma puoi lasciarlo
+                // <--- FUNDAMENTAL CORRECTION: Set the Subject (Standard JWT)
+                .withSubject(email)
+                // Here we save "ADMIN", "DOCTOR", etc.
+                .withClaim("role", role)
+                // .withClaim("email", email) // Redundant if we use Subject, but can be left
                 .withIssuedAt(now)
                 .withExpiresAt(validity)
                 .sign(algorithm);
     }
 
+    /**
+     * Extracts the JWT from the Authorization header of the HTTP request.
+     */
     public String resolveToken(HttpServletRequest req) {
         String bearerToken = req.getHeader("Authorization");
         if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
@@ -59,17 +76,21 @@ public class JwtTokenProvider {
         return null;
     }
 
+    /**
+     * Validates the cryptographic signature and the expiration of the token.
+     * Also verifies that the user associated with the token still exists in the database.
+     */
     public boolean validateToken(String token) {
         try {
             DecodedJWT jwt = JWT.require(algorithm).build().verify(token);
 
-            // Ora questo funzionerà perché abbiamo usato .withSubject() nella creazione
+            // Now this will work because we used .withSubject() during creation
             String email = jwt.getSubject();
             String role = jwt.getClaim("role").asString();
 
             if (email == null || role == null) return false;
 
-            // Verifica che l'utente esista ancora nel DB (Opzionale ma sicuro)
+            // Verify that the user still exists in the DB (Optional but secure)
             return switch (role.toUpperCase()) {
                 case "ADMIN" -> adminRepository.existsByEmail(email);
                 case "DOCTOR" -> doctorRepository.existsByEmail(email);
@@ -82,24 +103,28 @@ public class JwtTokenProvider {
         }
     }
 
+    /**
+     * Builds a Spring Security Authentication object from the parsed JWT.
+     */
     public UsernamePasswordAuthenticationToken getAuthentication(String token) {
         DecodedJWT decodedJWT = JWT.require(algorithm).build().verify(token);
 
-        // Prendo la mail dal Subject (standard)
+        // Get the email from the Subject (standard)
         String email = decodedJWT.getSubject();
         String role = decodedJWT.getClaim("role").asString();
 
-        // <--- QUI È DOVE RISOLVI IL PROBLEMA DEL "ROLE_"
-        // Spring Security vuole "ROLE_ADMIN", nel token c'è scritto "ADMIN".
-        // Lo aggiungiamo manualmente qui. PERFETTO.
+        // Spring Security requires "ROLE_ADMIN", but the token contains "ADMIN".
         SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + role);
 
         return new UsernamePasswordAuthenticationToken(
                 email, null, Collections.singletonList(authority));
     }
 
+    /**
+     * Utility method to quickly extract the user's email directly from a token.
+     */
     public String getEmailFromToken(String token) {
         DecodedJWT decodedJWT = JWT.require(algorithm).build().verify(token);
-        return decodedJWT.getSubject(); // Ora ritorna la mail corretta
+        return decodedJWT.getSubject(); // Now returns the correct email
     }
 }

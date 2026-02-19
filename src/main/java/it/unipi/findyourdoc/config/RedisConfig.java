@@ -1,6 +1,5 @@
 package it.unipi.findyourdoc.config;
 
-
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
@@ -18,24 +17,26 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
 
+/**
+ * Configuration for Redis caching and data access.
+ * Implements JSON serialization to ensure cross-node compatibility in the cluster.
+ */
 @Configuration
-@EnableCaching // Abilita l'uso di @Cacheable, @CacheEvict, ecc.
+@EnableCaching
 public class RedisConfig {
 
     /**
-     * Configurazione del RedisTemplate.
-     * Serve per le operazioni manuali (es. Locking degli slot, gestione token, ecc.).
+     * Configures RedisTemplate for manual operations.
+     * Uses JSON serializers to maintain human-readable data and avoid Java Serialization issues.
+     * * @param connectionFactory The cluster-aware connection factory.
+     * @return Configured RedisTemplate for String keys and Object values.
      */
     @Bean
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
-        // Serializer per le Chiavi (Stringa semplice)
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
-
-        // Serializer per i Valori (JSON)
-        // Usiamo GenericJackson2JsonRedisSerializer per salvare gli oggetti come JSON leggibile
         GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(objectMapper());
 
         template.setKeySerializer(stringSerializer);
@@ -48,40 +49,35 @@ public class RedisConfig {
     }
 
     /**
-     * Configurazione del CacheManager.
-     * Serve per gestire automaticamente la cache tramite annotazioni Spring.
+     * Configures the CacheManager for annotation-driven caching (@Cacheable).
+     * Sets default TTL and ensures all cached DTOs are stored as JSON.
+     * * @param connectionFactory The cluster-aware connection factory.
+     * @return A customized RedisCacheManager.
      */
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
-        // Configurazione di default per tutte le cache
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
-                // Durata di default della cache: 60 minuti
                 .entryTtl(Duration.ofMinutes(60))
-                // Non cachare valori nulli
                 .disableCachingNullValues()
-                // Usa la serializzazione JSON anche per la cache (fondamentale per leggere i DTO)
+                // Synchronizes serialization strategy between manual template and automated cache.
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(objectMapper())));
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(config)
-                // Esempio: Se vuoi configurazioni specifiche per cache diverse
-                // .withCacheConfiguration("doctor_appointments", config.entryTtl(Duration.ofMinutes(15))) // Scade prima
-                // .withCacheConfiguration("static_data", config.entryTtl(Duration.ofHours(24))) // Scade dopo
                 .build();
     }
 
     /**
-     * Configurazione custom dell'ObjectMapper per Jackson.
-     * Necessario per gestire correttamente le date (LocalDateTime) e i tipi polimorfici.
+     * Custom ObjectMapper for Jackson.
+     * Supports Java 8 Time API and preserves class type metadata in JSON.
+     * This is critical for deserializing polymorphic DTOs correctly from the cache.
      */
     private ObjectMapper objectMapper() {
         ObjectMapper mapper = new ObjectMapper();
-        // Modulo per gestire LocalDateTime, LocalDate, ecc. (Java 8 Time API)
         mapper.registerModule(new JavaTimeModule());
 
-        // Attiva il salvataggio del tipo di classe nel JSON.
-        // Questo permette a Redis di sapere che quel JSON corrisponde alla classe AppointmentReadDTO quando deserializza.
+        // Includes "@class" property in JSON to allow safe reconstruction of non-final POJOs.
         mapper.activateDefaultTyping(
                 LaissezFaireSubTypeValidator.instance,
                 ObjectMapper.DefaultTyping.NON_FINAL,

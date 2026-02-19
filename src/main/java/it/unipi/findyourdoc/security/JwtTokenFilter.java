@@ -13,26 +13,22 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Custom filter that executes once per request to validate JWT tokens.
- *
- * <p>This filter intercepts incoming HTTP requests, extracts the JWT token from the header,
- * validates it using {@link JwtTokenProvider}, and sets the authentication in the {@link
- * SecurityContextHolder} if the token is valid.
+ * Custom filter executed once per request to validate JWT tokens.
+ * Intercepts incoming HTTP requests, extracts the token, validates it via {@link JwtTokenProvider},
+ * and populates the {@link SecurityContextHolder} for the current security context.
  */
 @Component
-@RequiredArgsConstructor // Uses Lombok for clean constructor injection
+@RequiredArgsConstructor
 public class JwtTokenFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
 
     /**
-     * Core filter logic to resolve and validate the token.
+     * Core filter logic to resolve, validate, and process the JWT token.
      *
-     * @param request The incoming HTTP request.
-     * @param response The outgoing HTTP response.
+     * @param request     The incoming HTTP request.
+     * @param response    The outgoing HTTP response.
      * @param filterChain The chain of filters to proceed with.
-     * @throws ServletException If a servlet-specific error occurs.
-     * @throws IOException If an I/O error occurs.
      */
     @Override
     protected void doFilterInternal(
@@ -41,23 +37,22 @@ public class JwtTokenFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain)
             throws ServletException, IOException {
 
-        // Use the injected instance 'jwtTokenProvider' to extract the token
+        // Extracts the JWT token from the HTTP request header
         String token = jwtTokenProvider.resolveToken(request);
 
-        // 1. Check if the token exists and is valid
+        // Checks if the token is present and cryptographically valid
         if (token != null && jwtTokenProvider.validateToken(token)) {
 
-            // 2. Extract user identity and permissions (Authentication object)
+            // Retrieves user identity and roles to build the Authentication object
             UsernamePasswordAuthenticationToken auth = jwtTokenProvider.getAuthentication(token);
 
-            // 3. Set the authentication in the Spring Security Context
-            // This allows Spring Security to know who the current user is for this request.
+            // Populates the Spring Security context with the authenticated user for the current request
             if (auth != null) {
                 SecurityContextHolder.getContext().setAuthentication(auth);
             }
         }
 
-        // Continue the filter chain (pass the request to the next filter or controller)
+        // Proceeds with the next filter in the security chain
         filterChain.doFilter(request, response);
     }
 }

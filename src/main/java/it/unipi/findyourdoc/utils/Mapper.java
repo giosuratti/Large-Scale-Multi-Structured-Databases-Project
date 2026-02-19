@@ -3,26 +3,26 @@ package it.unipi.findyourdoc.utils;
 import it.unipi.findyourdoc.dto.mongo.*;
 import it.unipi.findyourdoc.model.mongo.*;
 
-import java.util.ArrayList;
-
+/**
+ * Utility class for object-to-object mapping.
+ * Handles the transformation between domain entities and DTOs to maintain layer isolation.
+ */
 public class Mapper {
 
+    /**
+     * Maps a master Appointment entity and specific doctor info to a Patient view DTO.
+     */
     public static AppointmentPatientDTO mapToPatientDTO(AppointmentFull entity, String doctorFirstName, String doctorLastName, String doctorNpi) {
         AppointmentPatientDTO dto = new AppointmentPatientDTO();
 
-        // 1. Dati tecnici
         dto.setId(entity.getAppointmentId());
-        dto.setDateTime(entity.getDateTime()); // O getAppointmentDateTime() a seconda del tuo modello
-        dto.setStatus(entity.getStatus()); // Es. "BOOKED"
+        dto.setDateTime(entity.getDateTime());
+        dto.setStatus(entity.getStatus());
 
-        // 2. Chi incontrerò? (Dati Dottore snapshot)
-
-        // Gestione sicura della lista specializzazioni
         if (entity.getSpecialties() != null && !entity.getSpecialties().isEmpty()) {
             dto.setDoctorSpecialties(entity.getSpecialties());
         }
 
-        // 3. Dove devo andare? (Location snapshot)
         if (entity.getLocation() != null) {
             LocationDTO locDto = new LocationDTO();
             locDto.setCity(entity.getLocation().getCity());
@@ -32,7 +32,6 @@ public class Mapper {
             dto.setLocation(locDto);
         }
 
-        dto.setDoctorSpecialties(entity.getSpecialties());
         dto.setDoctorFirstName(doctorFirstName);
         dto.setDoctorLastName(doctorLastName);
         dto.setDoctorNpi(doctorNpi);
@@ -40,12 +39,13 @@ public class Mapper {
         return dto;
     }
 
-    // Nel file Mapper.java
-
+    /**
+     * Maps a denormalized AppointmentPatient embedded entity to its DTO equivalent.
+     */
     public static AppointmentPatientDTO mapToPatientDTO(AppointmentPatient entity) {
         if (entity == null) return null;
 
-        AppointmentPatientDTO dto = new AppointmentPatientDTO();// O source.getId() se hai corretto
+        AppointmentPatientDTO dto = new AppointmentPatientDTO();
         dto.setDateTime(entity.getDateTime());
         dto.setId(entity.getAppointmentId());
         if (entity.getLocation() != null) {
@@ -55,10 +55,9 @@ public class Mapper {
             locDto.setState(entity.getLocation().getState());
             locDto.setZipCode(entity.getLocation().getZipCode());
             dto.setLocation(locDto);
-        } // Se hai un mapper per location
+        }
         dto.setStatus(entity.getStatus());
 
-        // Campi specifici presenti nell'embedded del paziente
         dto.setDoctorFirstName(entity.getDoctorFirstName());
         dto.setDoctorLastName(entity.getDoctorLastName());
         dto.setDoctorNpi(entity.getDoctorNpi());
@@ -67,6 +66,9 @@ public class Mapper {
         return dto;
     }
 
+    /**
+     * Maps symptom report summaries for brief history views.
+     */
     public static SymptomReportBriefDTO mapToSymptomBriefDTO(SymptomReportBrief entity) {
         SymptomReportBriefDTO dto = new SymptomReportBriefDTO();
         dto.setContext(entity.getContext());
@@ -76,37 +78,41 @@ public class Mapper {
         return dto;
     }
 
+    /**
+     * Maps a SymptomReportBrief to a DTO, ensuring context and symptoms are preserved.
+     */
     public static SymptomReportBriefDTO mapToBriefDTO(SymptomReportBrief report) {
         if (report == null) return null;
 
         SymptomReportBriefDTO dto = new SymptomReportBriefDTO();
-
-        // Copia i campi base
         dto.setCreatedAt(report.getCreatedAt());
         dto.setPossibleDiagnosies(report.getPossibleDiagnosies());
-
-        // IMPORTANTE: Copia anche contesto e sintomi (altrimenti arrivano vuoti al frontend)
         dto.setContext(report.getContext());
         dto.setSymptoms(report.getSymptoms());
 
         return dto;
     }
 
+    /**
+     * Maps a Rating entity to a DTO for patient feedback history.
+     */
     public static RatingDTO mapToPatientRatingDTO(Rating rating) {
         RatingDTO dto = new RatingDTO();
         dto.setDoctorNpi(rating.getDoctorNpi());
         dto.setRating(rating.getRating());
-        dto.setDoctorFirstName(rating.getDoctorFirstName());       // Usa il setter corretto di Lombok
-        dto.setDoctorLastName(rating.getDoctorLastName()); // Usa il setter corretto di Lombok
+        dto.setDoctorFirstName(rating.getDoctorFirstName());
+        dto.setDoctorLastName(rating.getDoctorLastName());
         return dto;
     }
 
+    /**
+     * Maps a Patient domain object to a profile read DTO.
+     */
     public static PatientReadDTO mapToReadDTO(Patient p) {
         PatientReadDTO dto = new PatientReadDTO();
         dto.setId(String.valueOf(p.getId()));
         dto.setEmail(p.getEmail());
         dto.setTelephone(p.getTelephone());
-
         dto.setFirstName(p.getFirstName());
         dto.setLastName(p.getLastName());
         dto.setAge(p.getAge());
@@ -121,15 +127,13 @@ public class Mapper {
             ));
         }
 
-        // Mapping delle liste (Brief oggetti)
-        if (p.getBookedAppointments() != null) {
-            // Qui dovresti avere un metodo di mapping per AppointmentBrief -> AppointmentBriefDTO
-        }
-
         return dto;
     }
 
-    public static Location mapLocationDtoToEntity(LocationDTO dto) {
+    /**
+     * Maps location DTOs back to domain entities for persistence.
+     */
+    public static Location mapLocationDTOToEntity(LocationDTO dto) {
         Location loc = new Location();
         loc.setAddress(dto.getAddress());
         loc.setCity(dto.getCity());
@@ -138,12 +142,14 @@ public class Mapper {
         return loc;
     }
 
+    /**
+     * Maps a Doctor domain object to a public profile read DTO.
+     */
     public static DoctorReadDTO mapToReadDTO(Doctor d) {
         DoctorReadDTO dto = new DoctorReadDTO();
         dto.setId(String.valueOf(d.getId()));
         dto.setEmail(d.getEmail());
         dto.setTelephone(d.getTelephone());
-
         dto.setFirstName(d.getFirstName());
         dto.setLastName(d.getLastName());
         dto.setSpecializations(d.getSpecialties());
@@ -162,12 +168,15 @@ public class Mapper {
         }
         return dto;
     }
+
+    /**
+     * Maps a Doctor domain object to a DTO containing availability slots.
+     */
     public static DoctorReadSlotsDTO mapToReadSlotsDTO(Doctor d) {
         DoctorReadSlotsDTO dto = new DoctorReadSlotsDTO();
         dto.setId(String.valueOf(d.getId()));
         dto.setEmail(d.getEmail());
         dto.setTelephone(d.getTelephone());
-
         dto.setFirstName(d.getFirstName());
         dto.setLastName(d.getLastName());
         dto.setSpecializations(d.getSpecialties());
@@ -188,13 +197,15 @@ public class Mapper {
         return dto;
     }
 
+    /**
+     * Maps a master Appointment entity to a full summary DTO.
+     */
     public static AppointmentFullDTO toAppointmentDTO(AppointmentFull entity) {
         if (entity == null) return null;
 
         AppointmentFullDTO dto = new AppointmentFullDTO();
         dto.setId(entity.getAppointmentId());
         dto.setDoctorId(entity.getDoctorId());
-        // Mappiamo i nomi completi per comodità di visualizzazione
         dto.setPatientFirstName(entity.getPatientFirstName());
         dto.setPatientLastName(entity.getPatientLastName());
         dto.setDateTime(entity.getDateTime());
@@ -209,56 +220,32 @@ public class Mapper {
                     entity.getLocation().getZipCode()
             ));
         }
-        dto.setPatientTelephone(dto.getPatientTelephone());
-        dto.setPatientEmail(dto.getPatientEmail());
+        dto.setPatientTelephone(entity.getPatientTelephone());
+        dto.setPatientEmail(entity.getPatientEmail());
         return dto;
     }
 
-    public static DoctorRatingDTO mapToDoctorRatingDTO(ArrayList<Integer> ratings) {
-        // Gestione null safety: se la lista è null, restituisci un DTO con lista vuota
-        if (ratings == null) {
-            return new DoctorRatingDTO(new ArrayList<>());
-        }
-
-        return new DoctorRatingDTO(ratings);
-    }
-
+    /**
+     * Maps an Admin domain object to a read DTO.
+     */
     public static AdminReadDTO mapToReadDTO(Admin admin) {
         AdminReadDTO dto = new AdminReadDTO();
-        // Convertiamo l'ID int in String per il DTO
         dto.setId(String.valueOf(admin.getId()));
         dto.setEmail(admin.getEmail());
         dto.setTelephone(admin.getTelephone());
         return dto;
     }
 
-    public static AppointmentDoctor mapToAppointmentDoctor(AppointmentFull full) {
-        AppointmentDoctor docAppt = new AppointmentDoctor();
-
-        // Campi ereditati da AppointmentBrief
-        docAppt.setAppointmentId(full.getAppointmentId());
-        docAppt.setDateTime(full.getDateTime());
-        docAppt.setLocation(full.getLocation());
-        docAppt.setStatus(full.getStatus());
-
-        // Campi specifici di AppointmentDoctor (Dati Paziente)
-        docAppt.setPatientFirstName(full.getPatientFirstName());
-        docAppt.setPatientLastName(full.getPatientLastName());
-        docAppt.setPatientTelephone(full.getPatientTelephone());
-
-        return docAppt;
-    }
-
+    /**
+     * Maps a Rating entity to a standard RatingDTO.
+     */
     public static RatingDTO mapToRatingDTO(Rating source) {
         if (source == null) return null;
-
         RatingDTO dto = new RatingDTO();
-        // Assicurati che i nomi dei campi corrispondano alla tua classe Rating
         dto.setDoctorNpi(source.getDoctorNpi());
         dto.setDoctorFirstName(source.getDoctorFirstName());
         dto.setDoctorLastName(source.getDoctorLastName());
         dto.setRating(source.getRating());
-
         return dto;
     }
 }

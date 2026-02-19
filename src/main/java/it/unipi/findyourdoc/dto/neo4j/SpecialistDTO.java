@@ -6,32 +6,36 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * DTO che rappresenta uno specialista trovato in base alla diagnosi e alla posizione.
+ * DTO representing a specialist found based on diagnosis and location.
+ * Provides detailed information about a doctor identified through graph database matching.
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "Oggetto contenente le informazioni dettagliate dello specialista trovato vicino all'utente.")
+@Schema(description = "Object containing detailed information about a specialist found near the user.")
 public class SpecialistDTO {
 
-    @Schema(description = "ID univoco del medico nel database", example = "65af12345")
+    /** * National Provider Identifier used as the unique key for the medical professional. */
+    @Schema(description = "Unique NPI of the doctor in the database", example = "65af12345")
     private String npi;
 
-    @Schema(description = "Nome del medico", example = "Giulia")
+    @Schema(description = "The doctor's first name", example = "Giulia")
     private String firstName;
 
-    @Schema(description = "Cognome del medico", example = "Bianchi")
+    @Schema(description = "The doctor's last name", example = "Bianchi")
     private String lastName;
 
-    @Schema(description = "Valutazione media ricevuta dai pazienti (da 1 a 5)", example = "4.8")
+    /** * Calculated average of all ratings assigned to this doctor by patients. */
+    @Schema(description = "Average rating received from patients (1 to 5)", example = "4.8")
     private Double avgRating;
 
-    @Schema(description = "Valutazione media ricevuta dai pazienti (da 1 a 5)", example = "4.8")
+    /** * Total number of ratings received, used to weight the average rating. */
+    @Schema(description = "Total number of ratings received from patients", example = "25")
     private Integer ratingCount;
 
-    @Schema(description = "Città del medico")
+    @Schema(description = "The doctor's city of practice")
     private String city;
 
-    @Schema(description = "Numero di telefono del medico")
+    @Schema(description = "The doctor's contact telephone number")
     private String phone;
 }

@@ -5,8 +5,7 @@ import it.unipi.findyourdoc.dto.auth.LoginRequestDTO;
 
 /**
  * Service interface for handling authentication operations in FindYourDoc.
- *
- * <p>Defines the contract for authenticating different types of users (Admins, Doctors, and Patients)
+ * Defines the contract for authenticating different types of users (Admins, Doctors, and Patients)
  * and issuing JWT tokens upon successful validation of credentials.
  */
 public interface AuthService {

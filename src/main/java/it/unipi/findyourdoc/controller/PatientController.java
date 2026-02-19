@@ -1,11 +1,6 @@
 package it.unipi.findyourdoc.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import it.unipi.findyourdoc.dto.mongo.*;
 import it.unipi.findyourdoc.dto.neo4j.SpecialistDTO;
@@ -25,87 +20,59 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * REST controller for managing Registered Patients.
- *
- * <p>Provides endpoints for registration, profile updates, retrieval, deletion, search, and
- * bookmark management.
+ * REST controller for Patient operations.
+ * Manages identity, health reports, booking logic, and medical search.
  */
 @RestController
 @RequestMapping("/api/patients")
 @RequiredArgsConstructor
 @Tag(
         name = "Patient Management",
-        description =
-                "Operations related to registered patients, including authentication context and search.")
+        description = "Operations related to registered patients, including authentication context and search.")
 public class PatientController {
 
     private final PatientService patientService;
     private final JwtTokenProvider jwtTokenProvider;
 
-    @Operation(
-            summary = "Register a new Patient",
-            description = "Creates a new patient account with the provided details.")
-    @ApiResponses(
-            value = {
-                    @ApiResponse(
-                            responseCode = "200",
-                            description = "Patient registered successfully",
-                            content = @Content(schema = @Schema(implementation = PatientCreateDTO.class))),
-                    @ApiResponse(
-                            responseCode = "400",
-                            description = "Invalid input or duplicate username/email")
-            })
+    /**
+     * Public endpoint for new patient onboarding.
+     */
+    @Operation(summary = "Register a new Patient")
     @PostMapping("/register")
-    public ResponseEntity<PatientReadDTO> registerPatient(
-            @RequestBody PatientCreateDTO createDTO) {
+    public ResponseEntity<PatientReadDTO> registerPatient(@RequestBody PatientCreateDTO createDTO) {
         return ResponseEntity.ok(patientService.registerPatient(createDTO));
     }
 
-    @Operation(
-            summary = "Update Patient Profile",
-            description =
-                    "Updates email, full name or password. Requires 'PATIENT'")
-    @ApiResponses(
-            value = {
-                    @ApiResponse(responseCode = "200", description = "Patient updated successfully"),
-                    @ApiResponse(responseCode = "404", description = "Patient not found"),
-                    @ApiResponse(responseCode = "400", description = "Duplicate email or invalid data")
-            })
+    /**
+     * Updates personal profile data.
+     * Subject is extracted from JWT for identity verification.
+     */
+    @Operation(summary = "Update Patient Profile")
     @PutMapping("/me")
     @PreAuthorize("hasRole('PATIENT')")
     public ResponseEntity<PatientReadDTO> updatePatient(HttpServletRequest request,
-            @RequestBody PatientUpdateDTO updateDTO) {
+                                                        @RequestBody PatientUpdateDTO updateDTO) {
         String token = jwtTokenProvider.resolveToken(request);
         String email = jwtTokenProvider.getEmailFromToken(token);
         return ResponseEntity.ok(patientService.updatePatient(email, updateDTO));
     }
 
-
-    @Operation(
-            summary = "Get Current Patient Profile",
-            description = "Retrieves the full profile of the currently logged-in patient using the JWT token."
-    )
+    /**
+     * Retrieves the current authenticated patient's profile.
+     */
+    @Operation(summary = "Get Current Patient Profile")
     @GetMapping("/me")
-    @PreAuthorize("hasRole('PATIENT')") // Assicuriamoci che sia un paziente
+    @PreAuthorize("hasRole('PATIENT')")
     public ResponseEntity<PatientReadDTO> getCurrentPatientProfile(HttpServletRequest request) {
-
-        // 1. Estrazione Email dal Token (Identity)
         String token = jwtTokenProvider.resolveToken(request);
         String email = jwtTokenProvider.getEmailFromToken(token);
-
-        // 2. Recupero Dati Completi dal Service (Data Fetching)
-        // Questo metodo (getUserByEmail) interroga MongoDB, mappa l'Entity in DTO
-        // e restituisce tutti i campi definiti nel tuo PatientReadDTO.
-        PatientReadDTO patientProfile = patientService.getPatientByEmail(email);
-
-        // 3. Ritorno al Client
-        return ResponseEntity.ok(patientProfile);
+        return ResponseEntity.ok(patientService.getPatientByEmail(email));
     }
 
-
-    @Operation(
-            summary = "Let a patient book a visit",
-            description = "Let a patient book a visit.")
+    /**
+     * Initiates the appointment booking process.
+     */
+    @Operation(summary = "Let a patient book a visit")
     @PostMapping("/book")
     @PreAuthorize("hasRole('PATIENT')")
     public ResponseEntity<AppointmentPatientDTO> bookAppointmentById(HttpServletRequest request, @RequestBody AppointmentBookDTO appointmentBookDTO) {
@@ -114,54 +81,50 @@ public class PatientController {
         return ResponseEntity.ok(patientService.bookAppointmentByEmail(email, appointmentBookDTO));
     }
 
-    @Operation(
-            summary = "Cancel a booked visit",
-            description = "Allows a patient to cancel an existing appointment. Usually changes status to 'CANCELLED'.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Appointment cancelled successfully"),
-            @ApiResponse(responseCode = "404", description = "Appointment not found"),
-            @ApiResponse(responseCode = "403", description = "Forbidden - You can only cancel your own appointments")
-    })
+    /**
+     * Cancels an existing appointment.
+     */
+    @Operation(summary = "Cancel a booked visit")
     @DeleteMapping("/cancel/{appointment_id}")
     @PreAuthorize("hasRole('PATIENT')")
-    public ResponseEntity<Void> cancelAppointment(@Parameter(description = "ID of the appointment to cancel") @PathVariable String appointment_id) {
+    public ResponseEntity<Void> cancelAppointment(@PathVariable String appointment_id) {
         patientService.cancelAppointment(appointment_id);
         return ResponseEntity.noContent().build();
     }
 
-    @Operation(
-            summary = "Get all future appointments for the current patient",
-            description = "Retrieves the list of all appointments associated with the authenticated patient.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "List of appointments retrieved successfully")
-    })
+    /**
+     * Returns a paginated list of upcoming appointments for the caller.
+     */
+    @Operation(summary = "Get all future appointments for the current patient")
     @GetMapping("/my-appointments")
     @PreAuthorize("hasRole('PATIENT')")
     public ResponseEntity<Page<AppointmentPatientDTO>> getMyAppointments(
             HttpServletRequest request,
-            @ParameterObject
-            @PageableDefault(size = 10, sort = "dateTime") Pageable pageable) { // <--- STILE ADMIN
+            @ParameterObject @PageableDefault(size = 10, sort = "dateTime") Pageable pageable) {
 
         String token = jwtTokenProvider.resolveToken(request);
         String email = jwtTokenProvider.getEmailFromToken(token);
         return ResponseEntity.ok(patientService.getAppointmentsByEmail(email, pageable));
     }
 
-    @Operation(
-            summary = "Get all symptom reports (Paginated)",
-            description = "Retrieves paginated reports. Default: Sorted by createdAt DESC.")
+    /**
+     * Retrieves patient-specific symptom reports chronologically.
+     */
+    @Operation(summary = "Get all symptom reports (Paginated)")
     @GetMapping("/symptomreports")
     @PreAuthorize("hasRole('PATIENT')")
     public ResponseEntity<Page<SymptomReportBriefDTO>> getMySymptomReports(
             HttpServletRequest request,
-            @ParameterObject
-            @PageableDefault(size = 10, sort = "createdAt") Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 10, sort = "createdAt") Pageable pageable) {
 
         String email = jwtTokenProvider.getEmailFromToken(jwtTokenProvider.resolveToken(request));
         return ResponseEntity.ok(patientService.getSymptomReportsByEmail(email, pageable));
     }
 
-    @Operation(summary = "Create symptom report", description = "Creates a new report and calculates patient context (age/location).")
+    /**
+     * Submits a new symptom report.
+     */
+    @Operation(summary = "Create symptom report")
     @PostMapping("/symptomsreport")
     @PreAuthorize("hasRole('PATIENT')")
     public ResponseEntity<SymptomReportBriefDTO> createSymptomReportByEmail(
@@ -172,55 +135,49 @@ public class PatientController {
         return ResponseEntity.ok(patientService.createSymptomReportByEmail(email, reportDTO));
     }
 
-    @Operation(summary = "Rate a doctor", description = "Adds a rating to a doctor. The system automatically retrieves doctor's names.")
+    /**
+     * Allows patients to rate doctors after consultation.
+     */
+    @Operation(summary = "Rate a doctor")
     @PostMapping("/rating")
     @PreAuthorize("hasRole('PATIENT')")
     public ResponseEntity<RatingDTO> addRating(HttpServletRequest request, @RequestBody @Valid RatingDTO ratingDTO) {
-        // Passiamo al service l'ID del dottore e il voto
         String email = jwtTokenProvider.getEmailFromToken(jwtTokenProvider.resolveToken(request));
         return ResponseEntity.ok(patientService.addRatingByEmail(email, ratingDTO));
     }
 
-    @Operation(
-            summary = "View all ratings (Paginated)",
-            description = "Retrieves all ratings. Default: size 20.")
+    /**
+     * Lists all ratings submitted by the current patient.
+     */
+    @Operation(summary = "View all ratings (Paginated)")
     @GetMapping("/ratings")
     public ResponseEntity<Page<RatingDTO>> getAllRatings(
             HttpServletRequest request,
-            @ParameterObject
-            @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         String email = jwtTokenProvider.getEmailFromToken(jwtTokenProvider.resolveToken(request));
         return ResponseEntity.ok(patientService.getAllRatingsByEmail(email, pageable));
     }
 
-    @Operation(
-            summary = "Find specialists by diagnosis and city",
-            description = "Maps a diagnosis to a specialty and searches for doctors in the specified city.")
+    /**
+     * Bridge endpoint: Maps a diagnosis to a specialty in Neo4j and searches Doctors in MongoDB.
+     */
+    @Operation(summary = "Find specialists by diagnosis and city")
     @GetMapping("/search/specialists/{city}")
     @PreAuthorize("hasRole('PATIENT')")
     public ResponseEntity<List<SpecialistDTO>> findSpecialistsInCity(
-            @Parameter(description = "The city to search in") @PathVariable String city,
-            @Parameter(description = "The diagnosis (e.g. Flu, Arrhythmia)") @RequestParam String diagnosis) {
-
-        // Non abbiamo più bisogno dell'email dal token per la posizione!
+            @PathVariable String city,
+            @RequestParam String diagnosis) {
         return ResponseEntity.ok(patientService.findSpecialistsByDiagnosisAndCity(city, diagnosis));
     }
 
-    @Operation(
-            summary = "Get Doctor Details",
-            description = "Retrieves full details of a doctor by ID, including available slots and contacts."
-    )
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Doctor details retrieved successfully"),
-            @ApiResponse(responseCode = "404", description = "Doctor not found")
-    })
+    /**
+     * Retrieves full doctor details including real-time availability slots.
+     */
+    @Operation(summary = "Get Doctor Details")
     @GetMapping("/doctor/{npi}")
-    // Può essere accessibile a tutti o solo ai pazienti loggati, decidi tu.
-    // Metto 'permitAll()' se vuoi che sia pubblico, altrimenti 'hasRole('PATIENT')'
     @PreAuthorize("hasAnyRole('PATIENT', 'ADMIN')")
     public ResponseEntity<DoctorReadSlotsDTO> getDoctorDetails(@PathVariable String npi) {
         return ResponseEntity.ok(patientService.getDoctorByNpi(npi));
     }
-
 }

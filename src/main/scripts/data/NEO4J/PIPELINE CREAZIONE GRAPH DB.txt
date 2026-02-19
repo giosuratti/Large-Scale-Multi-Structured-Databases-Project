@@ -1,0 +1,95 @@
+// Vincoli di unicità (creano implicitamente anche un indice)
+CREATE CONSTRAINT FOR (d:Disease) REQUIRE d.name IS UNIQUE;
+CREATE CONSTRAINT FOR (s:Symptom) REQUIRE s.name IS UNIQUE;
+CREATE CONSTRAINT FOR (doc:Doctor) REQUIRE doc.NPI IS UNIQUE;
+CREATE CONSTRAINT FOR (sp:Specialization) REQUIRE sp.name IS UNIQUE;
+
+// 1. Caricamento Specializzazioni
+LOAD CSV WITH HEADERS FROM 'file:///nodes_specialization.csv' AS row
+MERGE (sp:Specialization {name: row.name});
+
+// 2. Caricamento Sintomi
+LOAD CSV WITH HEADERS FROM 'file:///nodes_symptom.csv' AS row
+MERGE (s:Symptom {name: row.name});
+
+// 3. Caricamento Malattie con attributi Bayesiani
+// NOTA: Assicurati che il CSV abbia la colonna 'prior' (calcolata da Python)
+LOAD CSV WITH HEADERS FROM 'file:///nodes_disease.csv' AS row
+MERGE (d:Disease {name: row.name})
+SET d.prior = toFloat(row.prior),        // Fondamentale per la diagnosi
+    d.total_cases = toInteger(row.count); // Utile per statistiche future
+
+// 4. Relazione Sintomo -> Malattia
+// NOTA: Assicurati che il CSV abbia la colonna 'probability'
+:auto LOAD CSV WITH HEADERS FROM 'file:///rel_has_symptom.csv' AS row
+CALL {
+    WITH row
+    // 1. Scartiamo righe vuote usando i VERI nomi delle colonne
+    WITH row WHERE row.disease_name IS NOT NULL AND row.symptom_name IS NOT NULL
+
+    // 2. Puliamo gli spazi e forziamo tutto in MINUSCOLO dal CSV
+    WITH row, toLower(trim(row.disease_name)) AS cleanDisease, toLower(trim(row.symptom_name)) AS cleanSymptom
+
+    // 3. Facciamo il Match forzando in MINUSCOLO anche il nome salvato nel database
+    MATCH (d:Disease) WHERE toLower(d.name) = cleanDisease
+    MATCH (s:Symptom) WHERE toLower(s.name) = cleanSymptom
+
+    // 4. Creiamo la relazione e settiamo i pesi
+    MERGE (s)-[r:INDICATES_DISEASE]->(d)
+    SET r.weight = toInteger(row.weight),
+        r.probability = toFloat(row.probability)
+} IN TRANSACTIONS OF 2000 ROWS;
+// 5. Caricamento Specializzazioni dai file dei dottori (per sicurezza)
+LOAD CSV WITH HEADERS FROM "file:///dottori_output_neo4j.csv" AS row
+WITH row.Specialization AS spec
+WHERE spec IS NOT NULL AND spec <> ""
+MERGE (:Specialization {name: spec});
+
+// 6. Caricamento Dottori con Rating inizializzati
+:auto LOAD CSV WITH HEADERS FROM "file:///dottori_output_neo4j.csv" AS row
+CALL {
+    WITH row
+    MERGE (d:Doctor {NPI: row.NPI})
+    SET d.firstName = row.`Provider First Name`,
+        d.lastName = row.`Provider Last Name`,
+        d.city = row.City,
+        d.phone = row.Telephone,
+        d.ratingCount = 0,
+        d.avgRating = 0.0
+} IN TRANSACTIONS OF 100000 ROWS;
+
+// 7. Collegamento Dottore -> Specializzazione
+:auto LOAD CSV WITH HEADERS FROM "file:///dottori_output_neo4j.csv" AS row
+CALL {
+    WITH row
+    // Filtriamo immediatamente le righe senza specializzazione
+    WITH row WHERE row.Specialization IS NOT NULL AND row.Specialization <> ""
+
+    // Troviamo il Dottore e la Specializzazione
+    MATCH (d:Doctor {NPI: row.NPI})
+    MATCH (s:Specialization {name: row.Specialization})
+
+    // Creiamo la relazione
+    MERGE (s)-[:HAS_DOCTOR]->(d)
+} IN TRANSACTIONS OF 50000 ROWS;
+
+
+//malattia -> specializzazione
+:auto LOAD CSV WITH HEADERS FROM 'file:///rel_treated_by.csv' AS row
+CALL {
+    WITH row
+
+    // 1. Pulizia drastica dei dati in ingresso
+    WITH trim(toLower(row.start)) AS cleanDisease, trim(toLower(row.end)) AS cleanSpec
+
+    // 2. Filtriamo per sicurezza righe vuote
+    WHERE cleanDisease IS NOT NULL AND cleanSpec IS NOT NULL
+
+    // 3. Facciamo il Match (assicurati che i nodi siano stati creati in minuscolo, o adatta di conseguenza)
+    MATCH (d:Disease) WHERE toLower(trim(d.name)) = cleanDisease
+    MATCH (sp:Specialization) WHERE toLower(trim(sp.name)) = cleanSpec
+
+    // 4. Creiamo la relazione
+    MERGE (d)-[:TREATED_BY]->(sp)
+} IN TRANSACTIONS OF 2000 ROWS;
+

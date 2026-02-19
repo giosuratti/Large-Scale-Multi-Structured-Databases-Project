@@ -31,50 +31,68 @@ public class AuthServiceImplementation implements AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordEncoder passwordEncoder;
 
+    /**
+     * Authenticates an administrator and generates a JWT token upon success.
+     */
     @Override
     public AuthResponseDTO loginAdmin(LoginRequestDTO loginRequest) {
         String email = loginRequest.getEmail();
         log.info("Attempting ADMIN login for: {}", email);
 
+        // Search for the admin in the database, throwing an exception if the email is not registered
         Admin admin = adminRepository.findByEmail(email)
                 .orElseThrow(() -> new BadCredentialsException("Admin not found with email: " + email));
 
+        // Securely verify the plaintext password against the stored hash
         verifyPassword(loginRequest.getPassword(), admin.getPassword(), email);
 
+        // Generate a new JWT token assigning the "ADMIN" role
         String token = jwtTokenProvider.createToken(admin.getEmail(), "ADMIN");
         return new AuthResponseDTO(token, admin.getEmail(), "ADMIN");
     }
 
+    /**
+     * Authenticates a doctor and generates a JWT token upon success.
+     */
     @Override
     public AuthResponseDTO loginDoctor(LoginRequestDTO loginRequest) {
         String email = loginRequest.getEmail();
         log.info("Attempting DOCTOR login for: {}", email);
 
+        // Search for the doctor in the database, throwing an exception if the email is not registered
         Doctor doctor = doctorRepository.findByEmail(email)
                 .orElseThrow(() -> new BadCredentialsException("Doctor not found with email: " + email));
 
+        // Securely verify the plaintext password against the stored hash
         verifyPassword(loginRequest.getPassword(), doctor.getPassword(), email);
 
+        // Generate a new JWT token assigning the "DOCTOR" role
         String token = jwtTokenProvider.createToken(doctor.getEmail(), "DOCTOR");
         return new AuthResponseDTO(token, doctor.getEmail(), "DOCTOR");
     }
 
+    /**
+     * Authenticates a patient and generates a JWT token upon success.
+     */
     @Override
     public AuthResponseDTO loginPatient(LoginRequestDTO loginRequest) {
         String email = loginRequest.getEmail();
         log.info("Attempting PATIENT login for: {}", email);
 
+        // Search for the patient in the database, throwing an exception if the email is not registered
         Patient patient = patientRepository.findByEmail(email)
                 .orElseThrow(() -> new BadCredentialsException("Patient not found with email: " + email));
 
+        // Securely verify the plaintext password against the stored hash
         verifyPassword(loginRequest.getPassword(), patient.getPassword(), email);
 
+        // Generate a new JWT token assigning the "PATIENT" role
         String token = jwtTokenProvider.createToken(patient.getEmail(), "PATIENT");
         return new AuthResponseDTO(token, patient.getEmail(), "PATIENT");
     }
 
     /**
-     * Helper method to verify passwords and log failures.
+     * Helper method to verify passwords using the configured PasswordEncoder and log failures.
      */
     private void verifyPassword(String rawPassword, String encodedPassword, String email) {
         if (!passwordEncoder.matches(rawPassword, encodedPassword)) {

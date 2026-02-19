@@ -4,8 +4,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import it.unipi.findyourdoc.dto.auth.LoginRequestDTO; // Sostituisce LoginRequestDTO
-import it.unipi.findyourdoc.dto.auth.AuthResponseDTO; // Sostituisce AuthResponseDTO
+import it.unipi.findyourdoc.dto.auth.LoginRequestDTO;
+import it.unipi.findyourdoc.dto.auth.AuthResponseDTO;
 import it.unipi.findyourdoc.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,8 +16,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Controller responsible for handling authentication requests for FindYourDoc.
- * Provides public endpoints for login sessions for Admins, Doctors, and Patients.
+ * Controller handling identity verification and token issuance.
+ * Serves as the entry point for session management across different user roles.
  */
 @Slf4j
 @RestController
@@ -28,6 +28,10 @@ public class AuthController {
 
     private final AuthService authService;
 
+    /**
+     * Authenticates administrative accounts.
+     * Issues a high-privilege JWT for platform management.
+     */
     @Operation(summary = "Admin Login", description = "Authenticates an administrator. Returns a JWT token with ADMIN privileges.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Authentication successful"),
@@ -40,6 +44,10 @@ public class AuthController {
         return ResponseEntity.ok(authService.loginAdmin(loginRequest));
     }
 
+    /**
+     * Authenticates medical staff.
+     * Issues a JWT containing NPI and professional metadata.
+     */
     @Operation(summary = "Doctor Login", description = "Authenticates a medical professional. Returns a JWT token with DOCTOR privileges.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Authentication successful"),
@@ -51,6 +59,10 @@ public class AuthController {
         return ResponseEntity.ok(authService.loginDoctor(loginRequest));
     }
 
+    /**
+     * Authenticates standard users/patients.
+     * Provides basic access to appointment booking and personal health records.
+     */
     @Operation(summary = "Patient Login", description = "Authenticates a patient. Returns a JWT token with PATIENT privileges.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Authentication successful"),

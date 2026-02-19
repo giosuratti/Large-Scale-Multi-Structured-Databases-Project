@@ -19,7 +19,6 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Async;
@@ -32,6 +31,10 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Service implementation for administrative operations.
+ * Manages cross-database synchronization, user lifecycle, and cache consistency.
+ */
 @Service
 @RequiredArgsConstructor
 public class AdminServiceImplementation implements AdminService {
@@ -43,20 +46,16 @@ public class AdminServiceImplementation implements AdminService {
     private final DoctorGraphRepository doctorGraphRepository;
     private final AppointmentRepository appointmentRepository;
 
-    // CORREZIONE 1: Coerenza con gli altri service per le chiavi
+    /** * Redis template for manual cache key eviction. */
     private final StringRedisTemplate redisTemplate;
 
-    // CORREZIONE 2: Serve per pulire le cache standard (rating, appuntamenti)
+    /** * Service for triggering standard doctor cache invalidations. */
     private final DoctorService doctorService;
-
-    private final MongoTemplate mongoTemplate; // Spostato qui per @RequiredArgsConstructor
 
     private final CacheManager cacheManager;
 
     private static final Logger log = LoggerFactory.getLogger(AdminServiceImplementation.class);
     private static final String DOCTOR_SLOTS_CACHE_PREFIX = "doctor:slots:";
-
-    // ... [METODI CREATE, UPDATE, GET, SEARCH SONO OK E IDENTICI AL TUO CODICE] ...
 
     @Override
     public AdminReadDTO createAdmin(AdminCreateDTO dto) {
@@ -101,8 +100,10 @@ public class AdminServiceImplementation implements AdminService {
         return adminRepository.findByEmailStartingWith(emailPrefix).stream().map(Mapper::mapToReadDTO).collect(Collectors.toList());
     }
 
-    // ... [FINE METODI STANDARD] ...
-
+    /**
+     * Handles cascading deletion of users across all collections and graph nodes.
+     * Cancels future appointments and purges associated Redis entries.
+     */
     @Override
     @Transactional
     public void deleteUser(String email) {
@@ -126,9 +127,9 @@ public class AdminServiceImplementation implements AdminService {
 
             doctorRepository.deleteById(doctor.getId());
 
-            // REDIS: Invalida slot (manuale) + cache standard (via service)
+            // REDIS: Invalidate slots and standard cache
             redisTemplate.delete(DOCTOR_SLOTS_CACHE_PREFIX + doctor.getId());
-            doctorService.invalidateDoctorCache(doctor.getEmail()); // CORREZIONE IMPORTANTE
+            doctorService.invalidateDoctorCache(doctor.getEmail());
 
             deleted = true;
         }
@@ -147,14 +148,14 @@ public class AdminServiceImplementation implements AdminService {
                         appt.setStatus(AppointmentStatus.CANCELLED);
                         appointmentRepository.save(appt);
 
-                        // Ripristina slot al dottore
+                        // Restore availability to doctor
                         restoreSlotToDoctor(appt);
                     }
                 }
 
                 patientRepository.deleteById(patient.getId());
 
-                // REDIS: Invalida cache specifiche del paziente (che non ha un service con metodo publico di invalidazione)
+                // REDIS: Purge patient-specific history and session caches
                 redisTemplate.delete("patient_appointments::" + patient.getEmail());
                 redisTemplate.delete("patient_ratings::" + patient.getEmail());
                 redisTemplate.delete("patient_symptoms::" + patient.getEmail());
@@ -176,12 +177,11 @@ public class AdminServiceImplementation implements AdminService {
         }
     }
 
-    // Helper per pulizia codice
     private boolean isActive(AppointmentFull appt) {
         return appt.getStatus() != AppointmentStatus.CANCELLED && appt.getStatus() != AppointmentStatus.COMPLETED;
     }
 
-    // Helper per ripristino slot con logica Redis coerente
+    /** * Restores a cancelled appointment slot to the doctor's available pool. */
     private void restoreSlotToDoctor(AppointmentFull appt) {
         doctorRepository.findById(appt.getDoctorId()).ifPresent(doc -> {
             if (doc.getAvailableSlots() == null) doc.setAvailableSlots(new ArrayList<>());
@@ -191,12 +191,13 @@ public class AdminServiceImplementation implements AdminService {
                 Collections.sort(doc.getAvailableSlots());
                 doctorRepository.save(doc);
 
-                // Invalida cache slot dottore
+                // Evict availability cache
                 redisTemplate.delete(DOCTOR_SLOTS_CACHE_PREFIX + doc.getId());
             }
         });
     }
 
+    /** * Updates user password and evicts session-related caches. */
     @Override
     @Transactional
     public void changeUserPassword(String id, String newPassword) {
@@ -208,8 +209,6 @@ public class AdminServiceImplementation implements AdminService {
             Doctor doctor = doctorOpt.get();
             doctor.setPassword(encodedPassword);
             doctorRepository.save(doctor);
-
-            // CORREZIONE: Uso redisTemplate con stringhe corrette
             redisTemplate.delete("doctor_appointments::" + doctor.getEmail());
             userFound = true;
         }
@@ -220,8 +219,6 @@ public class AdminServiceImplementation implements AdminService {
                 Patient patient = patientOpt.get();
                 patient.setPassword(encodedPassword);
                 patientRepository.save(patient);
-
-                // CORREZIONE: Uso redisTemplate con stringhe corrette
                 redisTemplate.delete("patient_reports::" + patient.getEmail());
                 userFound = true;
             }
@@ -238,14 +235,15 @@ public class AdminServiceImplementation implements AdminService {
         }
 
         if (!userFound) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Nessun utente trovato con ID: " + id);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No user found with ID: " + id);
         }
     }
 
+    /** * Synchronizes aggregate ratings from MongoDB to Neo4j using parallel batching. */
     @Override
     @CacheEvict(value = {"specialist_search", "doctors_search_city"}, allEntries = true)
     public void syncDoctorRatings() {
-        log.info("Inizio sincronizzazione rating da MongoDB a Neo4j...");
+        log.info("Starting rating synchronization from MongoDB to Neo4j...");
         List<DoctorProjection> mongoDoctors = doctorRepository.findAllBy();
 
         List<Map<String, Object>> allUpdates = mongoDoctors.parallelStream()
@@ -264,10 +262,10 @@ public class AdminServiceImplementation implements AdminService {
             try {
                 doctorGraphRepository.bulkUpdateRatings(batch);
             } catch (Exception e) {
-                log.error("Errore batch Neo4j: {}", e.getMessage());
+                log.error("Neo4j batch error: {}", e.getMessage());
             }
         });
-        log.info("Sync completata.");
+        log.info("Sync completed.");
     }
 
     public static <T> List<List<T>> partitionList(List<T> list, int pageSize) {
@@ -278,36 +276,8 @@ public class AdminServiceImplementation implements AdminService {
         return partitions;
     }
 
-    /*@Override
-    @Transactional
-    @CacheEvict(value = {"doctor_details", "doctors_search_city"}, allEntries = true)
-    public void refreshWeeklySlots() {
-        // [CODICE IDENTICO AL TUO, VA BENE]
-        log.info("Inizio refresh agenda settimanale...");
-        mongoTemplate.updateMulti(new Query(), new Update().set("bookedThisWeek", new ArrayList<>()), Doctor.class);
-
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime nextWeek = now.plusDays(7).withHour(23).withMinute(59);
-
-        Criteria criteria = Criteria.where("dateTime").gte(now).lte(nextWeek)
-                .and("status").in(AppointmentStatus.CONFIRMED, AppointmentStatus.SCHEDULED, AppointmentStatus.PENDING);
-        List<AppointmentFull> upcomingAppointments = mongoTemplate.find(new Query(criteria), AppointmentFull.class);
-
-        Map<String, List<AppointmentDoctor>> appsByDoctor = upcomingAppointments.stream()
-                .collect(Collectors.groupingBy(AppointmentFull::getDoctorId, Collectors.mapping(Mapper::mapToAppointmentDoctor, Collectors.toList())));
-
-        if (!appsByDoctor.isEmpty()) {
-            BulkOperations bulkOps = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, Doctor.class);
-            for (Map.Entry<String, List<AppointmentDoctor>> entry : appsByDoctor.entrySet()) {
-                bulkOps.updateOne(new Query(Criteria.where("_id").is(entry.getKey())), new Update().set("bookedThisWeek", entry.getValue()));
-            }
-            bulkOps.execute();
-        }
-    }*/
-
     @Override
     public DoctorReadDTO registerDoctor(DoctorCreateDTO createDTO) {
-        // [CODICE IDENTICO AL TUO, VA BENE]
         if (doctorRepository.existsByEmail(createDTO.getEmail()) || doctorRepository.existsByNpi(createDTO.getNpi()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email already in use");
 
@@ -320,14 +290,13 @@ public class AdminServiceImplementation implements AdminService {
         doctor.setLastName(createDTO.getLastName());
         doctor.setSpecialties(createDTO.getSpecializations());
         doctor.setGender(createDTO.getGender());
-        if (createDTO.getLocation() != null) doctor.setLocation(Mapper.mapLocationDtoToEntity(createDTO.getLocation()));
+        if (createDTO.getLocation() != null) doctor.setLocation(Mapper.mapLocationDTOToEntity(createDTO.getLocation()));
 
         doctor.setAvailableSlots(new ArrayList<>());
         doctor.setBookedThisWeek(new ArrayList<>());
         doctor.setRatings(new ArrayList<>());
         doctor.setAvgRating(0.0);
         doctor.setRatingCount(0);
-        doctor.setTotalAppointments(0);
 
         Doctor savedDoctor = doctorRepository.save(doctor);
 
@@ -350,129 +319,56 @@ public class AdminServiceImplementation implements AdminService {
         return Mapper.mapToReadDTO(savedDoctor);
     }
 
-    /*@Override
-    public List<String> syncAllChangedDoctors() {
-
-        // 1. Recupera la lista leggera (Solo NPI e dati da cambiare)
-        List<DoctorUpdateProjection> pendingSyncs = doctorRepository.findAllPendingSyncs();
-
-        List<String> successfullySyncedNpis = new ArrayList<>();
-
-        if (pendingSyncs.isEmpty()) return successfullySyncedNpis;
-
-        log.info("Found {} doctors pending sync.", pendingSyncs.size());
-
-        for (DoctorUpdateProjection docInfo : pendingSyncs) {
-            try {
-                performSingleDoctorSync(docInfo);
-                successfullySyncedNpis.add(docInfo.npi());
-            } catch (Exception e) {
-                log.error("Failed to sync doctor NPI: {}", docInfo.npi(), e);
-            }
-        }
-
-        return successfullySyncedNpis;
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    protected void performSingleDoctorSync(DoctorUpdateProjection docInfo) {
-        String npi = docInfo.npi();
-        String newPhone = docInfo.telephone();
-        Location newLocation = docInfo.location();
-
-        if (newPhone == null || newLocation == null) {
-            throw new IllegalStateException("Sync data incomplete for NPI: " + npi);
-        }
-
-        // --- FASE 1: Aggiornamento NEO4J ---
-        doctorGraphRepository.updateDoctorDataByNpi(npi, newPhone, newLocation.getCity());
-
-        // --- FASE 2: Aggiornamento MASTER COLLECTION (Bulk Update) ---
-        // Invece di scaricare 1000 oggetti e salvarli 1000 volte, facciamo un solo update.
-        appointmentRepository.updateFutureAppointmentsDataBulk(npi, newLocation);
-
-        // --- FASE 3: Aggiornamento EMBEDDED PAZIENTI ---
-        // Qui ci servono gli ID per sapere QUALI pazienti toccare.
-        // Scarichiamo solo la proiezione (pochi KB).
-        List<AppointmentSyncProjection> futureAppointments = appointmentRepository.findFutureSummariesByDoctorNpi(npi);
-
-        for (AppointmentSyncProjection appt : futureAppointments) {
-            // Usiamo i dati della proiezione per mirare al paziente giusto
-            patientRepository.updateEmbeddedDoctorData(
-                    appt.patientId(),
-                    appt.appointmentId(),
-                    newLocation,
-                    newPhone
-            );
-        }
-
-        // --- FASE 4: RESET FLAG ---
-        doctorRepository.markAsSyncedByNpi(npi);
-
-        log.info("Successfully synced doctor NPI: {} (Updated {} patient records)", npi, futureAppointments.size());
-    }*/
-
-    // ------------------------------------------------------------------------
-    // METODO PUBBLICO: Esegue il sync su TUTTI i dottori (Batch)
-    // ------------------------------------------------------------------------
+    /** * Asynchronously synchronizes profile updates across MongoDB and Neo4j. */
     @Override
     @Async
     public void syncAllDoctors() {
-        log.info("Inizio Sync Massivo...");
+        log.info("Starting massive synchronization...");
         List<Doctor> allDoctors = doctorRepository.findAll();
 
-        // 1. Usiamo ancora il DTO per comodità nel codice Java
         List<DoctorGraphUpdateProjection> neo4jBatch = new ArrayList<>();
 
-        // 2. Loop classico
         for (Doctor doc : allDoctors) {
             try {
-                // Passiamo la lista al metodo singolo
                 performSingleDoctorSync(doc, neo4jBatch);
             } catch (Exception e) {
-                log.error("Errore sync doctor {}: {}", doc.getEmail(), e.getMessage());
+                log.error("Error syncing doctor {}: {}", doc.getEmail(), e.getMessage());
             }
         }
 
-        // 3. ESECUZIONE UNWIND (Conversione DTO -> MAP)
         if (!neo4jBatch.isEmpty()) {
-
-            // --- CONVERSIONE FONDAMENTALE ---
             List<Map<String, Object>> mapBatch = neo4jBatch.stream()
                     .map(dto -> {
                         Map<String, Object> map = new HashMap<>();
                         map.put("npi", dto.npi());
-                        // Gestione null-safe (se telefono è null, metti stringa vuota o salta)
                         map.put("telephone", dto.telephone() != null ? dto.telephone() : "");
                         map.put("city", dto.city() != null ? dto.city() : "");
                         return map;
                     })
                     .collect(Collectors.toList());
 
-            log.info("Aggiornamento Neo4j per {} dottori in corso...", mapBatch.size());
-
-            // Chiamiamo il repository con la lista di mappe
+            log.info("Updating Neo4j for {} doctors...", mapBatch.size());
             doctorGraphRepository.bulkUpdateDoctors(mapBatch);
-
-            log.info("Neo4j Bulk Update completato.");
+            log.info("Neo4j Bulk Update completed.");
         }
     }
 
-    // ------------------------------------------------------------------------
-    // LOGICA CORE (Privata e riutilizzata)
-    // ------------------------------------------------------------------------
+    /**
+     * Internal logic for syncing a single doctor document.
+     * Manages weekly schedule shifting and denormalized data propagation.
+     */
     public void performSingleDoctorSync(Doctor doctor, List<DoctorGraphUpdateProjection> neo4jBatch) {
         boolean dirty = false;
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime oneWeekFromNow = now.plusDays(7);
 
-        // A. CLEANUP (Invariato)
+        // A. CLEANUP: Remove past appointments from weekly view
         if (doctor.getBookedThisWeek() != null) {
             boolean removed = doctor.getBookedThisWeek().removeIf(appt -> appt.getDateTime().isBefore(now));
             if (removed) dirty = true;
         }
 
-        // B. TIME SHIFT (Invariato)
+        // B. TIME SHIFT: Move appointments into the 7-day window
         if (doctor.getFutureAppointments() != null && !doctor.getFutureAppointments().isEmpty()) {
             List<AppointmentFull> futures = appointmentRepository.findAllById(doctor.getFutureAppointments());
             List<String> idsMoved = new ArrayList<>();
@@ -480,7 +376,7 @@ public class AdminServiceImplementation implements AdminService {
             for (AppointmentFull appt : futures) {
                 if (appt.getDateTime().isBefore(oneWeekFromNow)) {
                     AppointmentDoctor embedded = new AppointmentDoctor();
-                    embedded.setAppointmentId(appt.getAppointmentId()); // Usa getId() standard
+                    embedded.setAppointmentId(appt.getAppointmentId());
                     embedded.setPatientFirstName(appt.getPatientFirstName());
                     embedded.setPatientLastName(appt.getPatientLastName());
                     embedded.setPatientTelephone(appt.getPatientTelephone());
@@ -498,12 +394,11 @@ public class AdminServiceImplementation implements AdminService {
             }
         }
 
-        // C. INFO UPDATE (Logica Unwind + Mongo Bulk)
-        if (doctor.getUpdated()) { // Assumo sia isUpdated() booleano
+        // C. INFO UPDATE: Propagate profile changes to embedded structures
+        if (doctor.getUpdated()) {
             String newPhone = doctor.getTelephone();
             Location newLocation = doctor.getLocation();
 
-            // 1. NON chiamiamo Neo4j qui. Aggiungiamo alla lista batch!
             if (neo4jBatch != null) {
                 neo4jBatch.add(new DoctorGraphUpdateProjection(
                         doctor.getNpi(),
@@ -512,10 +407,9 @@ public class AdminServiceImplementation implements AdminService {
                 ));
             }
 
-            // 2. Mongo Master Update (Questo rimane qui, è specifico per ID)
+            // Bulk update in master collection and patient documents
             appointmentRepository.updateDoctorInfoBulk(doctor.getId(), newLocation, newPhone);
 
-            // 3. Mongo Patient Update (Rimane qui, serve iterazione sugli embedded)
             List<AppointmentSyncProjection> targets = appointmentRepository.findFuturePatientIdsByDoctorId(doctor.getId());
             for (AppointmentSyncProjection target : targets) {
                 patientRepository.updateEmbeddedDoctorData(target.patientId(), target.appointmentId(), newLocation, newPhone);
@@ -525,18 +419,17 @@ public class AdminServiceImplementation implements AdminService {
             dirty = true;
         }
 
-        // SALVATAGGIO
+        // PERSISTENCE AND CACHE EVICTION
         if (dirty) {
             if (doctor.getBookedThisWeek() != null) {
                 doctor.getBookedThisWeek().sort(Comparator.comparing(AppointmentDoctor::getDateTime));
             }
             doctorRepository.save(doctor);
 
-            // Invalida cache specifiche
+            // Purge Redis keys
             String cacheKey = DOCTOR_SLOTS_CACHE_PREFIX + doctor.getId();
             redisTemplate.delete(cacheKey);
-            // Invalida cache di ricerca
-            // Nota: CacheEvict manuale qui perché siamo dentro un metodo privato chiamato da un loop
+
             Objects.requireNonNull(cacheManager.getCache("doctor_details")).evict(doctor.getEmail());
         }
     }

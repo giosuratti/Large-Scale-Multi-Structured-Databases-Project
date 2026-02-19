@@ -14,24 +14,30 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Data Access Object for Appointment persistence in MongoDB.
+ * Implements optimized query projections and bulk update operations for calendar consistency.
+ */
 @Repository
 public interface AppointmentRepository extends MongoRepository<AppointmentFull, String> {
 
+    /** * Checks for scheduling conflicts by identifying existing slots for a specific doctor. */
     boolean existsByDoctorIdAndDateTime(String id, LocalDateTime dateTime);
 
     List<AppointmentFull> findByPatientIdOrderByDateTimeDesc(String patientId);
 
     List<AppointmentFull> findByDoctorId(String Id);
 
+    /** * Retrieves upcoming appointments for a doctor based on a specific cutoff time. */
     List<AppointmentFull> findByDoctorIdAndDateTimeAfter(String doctorId, LocalDateTime now);
 
     List<AppointmentFull> findByPatientIdAndDateTimeAfter(String patientId, LocalDateTime now);
 
-    // Recupera solo i campi definiti nel record
+    /** * Optimized projection that retrieves only essential metadata via field exclusion. */
     @Query(value = "{ '_id': ?0 }", fields = "{ 'appointmentId': 1, 'doctorId': 1, 'patientId': 1, 'dateTime': 1, 'status': 1 }")
     Optional<AppointmentFullSummary> findSummaryByAppointmentId(String id);
 
-    // Aggiorna lo stato senza scaricare tutto l'oggetto
+    /** * In-place update to cancel an appointment without loading the full document into memory. */
     @Query("{ '_id': ?0 }")
     @Update("{ '$set': { 'status': 'CANCELLED' } }")
     void updateStatusToCancelled(String id);
@@ -43,15 +49,14 @@ public interface AppointmentRepository extends MongoRepository<AppointmentFull, 
     @Update("{ '$set': { 'status': ?1 } }")
     void updateStatus(String id, AppointmentStatus status);
 
-    // 1. LEGGE SOLO I CAMPI NECESSARI (Proiezione)
+    /** * Fetches IDs of future active appointments to facilitate cross-document synchronization. */
     @Query(
             value = "{ 'doctorNpi': ?0, 'dateTime': { $gt: new Date() }, 'status': { $in: ['SCHEDULED', 'PENDING', 'RESCHEDULED'] } }",
-            fields = "{ 'appointmentId': 1, 'patientId': 1 }" // Scarica SOLO questi campi!
+            fields = "{ 'appointmentId': 1, 'patientId': 1 }"
     )
     List<AppointmentSyncProjection> findFutureSummariesByDoctorNpi(String doctorNpi);
 
-    // 2. AGGIORNAMENTO MASSIVO (Bulk Update)
-    // Aggiorna Location e Telefono di TUTTI gli appuntamenti futuri in una sola query atomica.
+    /** * Executes an atomic bulk update for all future appointments of a specific doctor. */
     @Query("{ 'doctorNpi': ?0, 'dateTime': { $gt: new Date() }, 'status': { $in: ['SCHEDULED', 'PENDING', 'RESCHEDULED'] } }")
     @Update("{ '$set': { 'location': ?1} }")
     void updateFutureAppointmentsDataBulk(String doctorNpi, Location newLocation);
@@ -64,9 +69,7 @@ public interface AppointmentRepository extends MongoRepository<AppointmentFull, 
     @Update("{ '$set' : { 'location' : ?1, 'doctorTelephone' : ?2 } }")
     void updateDoctorInfoBulk(String doctorId, Location location, String doctorTelephone);
 
-    // 2. Proiezione leggera per trovare quali pazienti aggiornare
-    // Restituisce solo PatientID e AppointmentID per gli appuntamenti futuri
+    /** * Lightweight projection used to identify which patient documents require synchronization updates. */
     @Query(value = "{ 'doctorId' : ?0, 'status' : 'SCHEDULED' }", fields = "{ 'patientId' : 1, '_id' : 1 }")
     List<AppointmentSyncProjection> findFuturePatientIdsByDoctorId(String doctorId);
-
 }

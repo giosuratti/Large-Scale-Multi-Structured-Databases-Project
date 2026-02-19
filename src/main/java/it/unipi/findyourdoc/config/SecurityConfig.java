@@ -22,6 +22,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * Main security configuration class.
+ * Manages authentication, authorization, and CORS policies.
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -31,15 +35,13 @@ public class SecurityConfig {
     private final JwtTokenFilter jwtTokenFilter;
 
     /**
-     * FIX: This bean bypasses the Security Filter Chain entirely for Swagger resources.
-     * This prevents the "Invalid mapping pattern" error caused by the new PathPatternParser
-     * conflicting with Swagger's internal resource paths.
+     * Bypasses the filter chain for documentation resources.
+     * Prevents PathPatternParser conflicts with Swagger/OpenAPI paths.
+     * @return WebSecurityCustomizer to ignore specific endpoints.
      */
-
     @Bean
     public WebSecurityCustomizer webSecurityCustomizer() {
         return (web) -> web.ignoring()
-                // Usiamo esplicitamente AntPathRequestMatcher per ogni percorso
                 .requestMatchers(new AntPathRequestMatcher("/v3/api-docs/**"))
                 .requestMatchers(new AntPathRequestMatcher("/swagger-ui/**"))
                 .requestMatchers(new AntPathRequestMatcher("/swagger-ui.html"))
@@ -47,6 +49,12 @@ public class SecurityConfig {
                 .requestMatchers(new AntPathRequestMatcher("/webjars/**"));
     }
 
+    /**
+     * Configures the main security filter chain.
+     * Enforces stateless session management and integrates JWT filtering.
+     * @param http HttpSecurity configuration.
+     * @return SecurityFilterChain object.
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -54,25 +62,27 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                // Ensures the server does not store session state for JWT compatibility.
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Anche qui, meglio essere espliciti se continua a dare errore
                         .requestMatchers(new AntPathRequestMatcher("/api/auth/**")).permitAll()
                         .anyRequest().permitAll()
                 )
+                // Injects the custom JWT filter before the standard auth filter.
                 .addFilterBefore(jwtTokenFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
     /**
-     * Configures CORS to allow requests from your frontend (usually localhost:3000 or 4200)
+     * Defines Cross-Origin Resource Sharing (CORS) rules.
+     * Necessary for frontend interaction in distributed environments.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("*")); // Change to specific origins in production
+        configuration.setAllowedOrigins(List.of("*"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("authorization", "content-type", "x-auth-token"));
         configuration.setExposedHeaders(List.of("x-auth-token"));
@@ -82,6 +92,9 @@ public class SecurityConfig {
         return source;
     }
 
+    /**
+     * Standard encoder for secure password hashing using BCrypt.
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();

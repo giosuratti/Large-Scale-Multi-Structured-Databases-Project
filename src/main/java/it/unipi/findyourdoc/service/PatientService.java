@@ -8,54 +8,45 @@ import org.springframework.data.domain.Pageable;
 import java.util.List;
 
 /**
- * Service interface for managing Registered User entities.
- *
- * <p>Defines the business logic for user registration, profile updates (including sensitive data
- * like passwords), information retrieval, and search capabilities.
+ * Service interface for managing Patient entities.
+ * Handles registration, profile updates, appointment booking, and specialist discovery.
  */
 public interface PatientService {
 
-    /**
-     * Registers a new user in the system.
-     *
-     * @param createDTO The DTO containing the initial user data.
-     * @return The created user details.
-     * @throws IllegalArgumentException If the email is already in use.
-     */
+    /** * Registers a new patient in the system. */
     PatientReadDTO registerPatient(PatientCreateDTO createDTO);
 
-    /**
-     * Updates an existing user's profile.
-     *
-     * <p>Allows updating the email, username, password, and full name. Performs necessary validation
-     * to ensure uniqueness of email and username.
-     *
-     * @param email The unique identifier of the user to update.
-     * @param updateDTO The DTO containing the fields to update.
-     * @return The updated user details.
-     * @throws IllegalArgumentException If the new email or username is already taken.
-     */
+    /** * Updates an existing patient's profile details. */
     PatientReadDTO updatePatient(String email, PatientUpdateDTO updateDTO);
 
+    /** * Retrieves a patient's profile by their unique email address. */
     PatientReadDTO getPatientByEmail(String email);
 
+    /** * Books a new appointment for the patient. */
     AppointmentPatientDTO bookAppointmentByEmail(String id, AppointmentBookDTO appointmentBookDTO);
 
+    /** * Cancels an existing appointment. */
     void cancelAppointment(String id);
 
+    /** * Retrieves a paginated list of the patient's appointments. */
     Page<AppointmentPatientDTO> getAppointmentsByEmail(String email, Pageable pageable);
 
+    /** * Retrieves a paginated list of symptom reports submitted by the patient. */
     Page<SymptomReportBriefDTO> getSymptomReportsByEmail(String email, Pageable pageable);
 
+    /** * Creates and saves a new symptom report for the patient. */
     SymptomReportBriefDTO createSymptomReportByEmail(String email, SymptomReportCreateDTO createDTO);
 
-    RatingDTO addRatingByEmail (String email, RatingDTO ratingDTO);
+    /** * Submits a rating for a doctor. */
+    RatingDTO addRatingByEmail(String email, RatingDTO ratingDTO);
 
+    /** * Retrieves a paginated list of all ratings submitted by the patient. */
     Page<RatingDTO> getAllRatingsByEmail(String email, Pageable pageable);
 
+    /** * Queries the Neo4j graph to find specialists in a given city for a specific diagnosis. */
     List<SpecialistDTO> findSpecialistsByDiagnosisAndCity(String city, String diagnosis);
 
+    /** * Retrieves a doctor's profile and their available booking slots using their NPI. */
     DoctorReadSlotsDTO getDoctorByNpi(String id);
-
 
 }

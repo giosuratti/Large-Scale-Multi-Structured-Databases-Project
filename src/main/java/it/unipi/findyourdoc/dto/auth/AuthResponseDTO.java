@@ -6,8 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Data Transfer Object for the authentication response.
- * Returns the JWT token along with user context (email and role).
+ * DTO for the authentication response.
+ * Contains the JWT and user authorization context.
  */
 @Data
 @NoArgsConstructor
@@ -15,26 +15,30 @@ import lombok.NoArgsConstructor;
 @Schema(description = "Response object containing the JWT authentication token and user context.")
 public class AuthResponseDTO {
 
-    /** The JSON Web Token (JWT) issued for the authenticated session. */
+    /** * The JSON Web Token (JWT) issued for the session.
+     */
     @Schema(
-            description = "The JWT access token used for authorizing subsequent requests.",
+            description = "JWT access token for authorizing subsequent requests.",
             example = "eyJhbGciOiJIUzI1NiJ9...")
     private String accessToken;
 
-    /** The type of the token, typically "Bearer". */
+    /** * Token category, strictly "Bearer".
+     */
     @Schema(description = "The type of the authentication token.", example = "Bearer")
     private String tokenType = "Bearer";
 
-    /** The user's email address. */
+    /** * Authenticated user identifier.
+     */
     @Schema(description = "The email of the authenticated user.", example = "doctor@findyourdoc.it")
     private String email;
 
-    /** The assigned role (ADMIN, DOCTOR, or PATIENT). */
-    @Schema(description = "The role assigned to the user.", example = "DOCTOR")
+    /** * Assigned security role for RBAC.
+     */
+    @Schema(description = "The role assigned to the user (ADMIN, DOCTOR, PATIENT).", example = "DOCTOR")
     private String role;
 
     /**
-     * Minimal constructor for basic token responses.
+     * Standard constructor for manual token issuance.
      *
      * @param accessToken The JWT access token.
      * @param email The user email.

@@ -7,14 +7,14 @@ import org.springframework.scheduling.annotation.EnableAsync;
 
 /**
  * Main entry point for the FindYourDoc application.
- * * The @EnableMongoAuditing annotation is required to automatically
- * handle the @CreatedDate field in your User model.
+ * Enables Spring Boot auto-configuration, MongoDB auditing for timestamps, and asynchronous processing.
  */
 @SpringBootApplication
 @EnableMongoAuditing
 @EnableAsync
 public class FindYourDocBackendApplication {
 
+    /** * Application execution starts here. */
     public static void main(String[] args) {
         SpringApplication.run(FindYourDocBackendApplication.class, args);
     }

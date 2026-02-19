@@ -7,12 +7,17 @@ import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
 
-
+/**
+ * DTO for retrieving a professional's full rating history.
+ * Aggregates all numeric feedback for statistical analysis or distribution charting.
+ */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Schema(description = "DTO representing all the ratings received by a doctor")
 public class DoctorRatingDTO {
-    @Schema(description = "All the ratings received")
+
+    /** * Collection of integer scores (typically 1-5) submitted by patients. */
+    @Schema(description = "List of all numeric ratings received")
     private ArrayList<Integer> rating;
 }

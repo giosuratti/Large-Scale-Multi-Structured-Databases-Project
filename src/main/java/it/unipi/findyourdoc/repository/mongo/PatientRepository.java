@@ -6,21 +6,22 @@ import org.springframework.data.mongodb.repository.Query;
 import org.springframework.data.mongodb.repository.Update;
 import org.springframework.stereotype.Repository;
 
+/**
+ * Data Access Object for Patient persistence in MongoDB.
+ * Manages patient-specific queries and complex in-place updates for denormalized arrays.
+ */
 @Repository
 public interface PatientRepository extends UserRepository<Patient> {
-    // Questo metodo serve al JwtTokenProvider per validare il paziente
-    // boolean existsByEmail(String email);
 
-    // Optional<Patient> findByEmail(String email);
+    // Common identity validations (like existsByEmail) are inherited from UserRepository.
 
-    // void deleteByEmail(String email);
-
-    // Recupera solo l'email
-
+    /** * Atomically updates doctor details within a specific embedded appointment.
+     * Utilizes the MongoDB positional operator ($) to pinpoint the exact array element.
+     */
     @Query("{ '_id': ?0, 'bookedAppointments.appointmentId': ?1 }")
     @Update("{ '$set': { " +
-            "  'bookedAppointments.$.location': ?2, " +     // Aggiorna l'oggetto Location
-            "  'bookedAppointments.$.doctorTelephone': ?3 " +  // Aggiorna la stringa Telefono
+            "  'bookedAppointments.$.location': ?2, " +     // Updates the nested Location object
+            "  'bookedAppointments.$.doctorTelephone': ?3 " +  // Updates the nested telephone string
             "} }")
     void updateEmbeddedDoctorData(
             String patientId,

@@ -4,14 +4,22 @@ import lombok.Data;
 import org.springframework.data.neo4j.core.schema.Id;
 import org.springframework.data.neo4j.core.schema.Node;
 
+/**
+ * Entity representing a Specialization node in the Neo4j graph database.
+ * This node acts as a central hub connecting symptoms/diseases to the doctors
+ * who specialize in treating them.
+ */
 @Data
 @Node("Specialization")
 public class SpecializationNode {
 
+    /** * The unique name of the medical specialization (e.g., "Cardiology"). */
     @Id
     private String name;
 
-    // NOTA: Non mappiamo la lista dei dottori qui (List<DoctorNode>) per motivi di performance.
-    // Se carichi una specializzazione "Cardiologia", non vuoi scaricare 10.000 dottori insieme.
-    // La relazione esiste nel DB, ma lato Java la lasciamo "lazy" o la gestiamo dal lato del Dottore (INCOMING).
+    // NOTE: We do not map the list of doctors here (List<DoctorNode>) for performance reasons.
+    // Loading a specialization like "Cardiology" would otherwise trigger the retrieval
+    // of thousands of associated doctor nodes.
+    // The relationship exists in the database, but in Java, we keep it "lazy"
+    // or manage it from the Doctor side using INCOMING directions.
 }
