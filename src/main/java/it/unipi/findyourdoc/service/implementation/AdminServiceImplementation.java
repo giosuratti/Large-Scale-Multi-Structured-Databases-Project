@@ -391,7 +391,7 @@ public class AdminServiceImplementation implements AdminService {
     @Async
     public void syncAllDoctors() {
         long totalDbDoctors = doctorRepository.count();
-        log.info("🚀 Starting massive sync. Total doctors in DB: {}. Scanning for active ones...", totalDbDoctors);
+        log.info("Starting massive sync. Total doctors in DB: {}. Scanning for active ones...", totalDbDoctors);
 
         long startTime = System.currentTimeMillis();
         int processedCount = 0;
@@ -405,7 +405,7 @@ public class AdminServiceImplementation implements AdminService {
                 // Process in chunks of 500
                 if (doctorChunk.size() == 500) {
                     processDoctorChunk(doctorChunk);
-                    log.info("⏳ Sync in progress: {} active doctors processed...", processedCount);
+                    log.info("Sync in progress: {} active doctors processed...", processedCount);
                     doctorChunk.clear();
                 }
             }
@@ -417,11 +417,11 @@ public class AdminServiceImplementation implements AdminService {
             }
 
             long durationMs = System.currentTimeMillis() - startTime;
-            log.info("✅ Massive sync completed in {} ms! Processed {} active doctors out of {}.",
+            log.info("Massive sync completed in {} ms! Processed {} active doctors out of {}.",
                     durationMs, processedCount, totalDbDoctors);
 
         } catch (Exception e) {
-            log.error("❌ Critical failure during massive sync: {}", e.getMessage(), e);
+            log.error("Critical failure during massive sync: {}", e.getMessage(), e);
         }
     }
 
