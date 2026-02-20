@@ -7,6 +7,8 @@ import it.unipi.findyourdoc.dto.mongo.DiagnosisAnalyticsDTO;
 import it.unipi.findyourdoc.dto.mongo.SymptomCountDTO;
 import it.unipi.findyourdoc.service.AnalyticsService;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -32,7 +34,7 @@ import java.time.LocalDateTime;
 public class AnalyticsController {
 
     private final AnalyticsService analyticsService;
-
+    private static final Logger log = LoggerFactory.getLogger(AnalyticsController.class);
     /**
      * Retrieves the most reported symptoms within a specific geographic area and timeframe.
      * Useful for tracking disease outbreaks or regional health trends.
@@ -45,7 +47,12 @@ public class AnalyticsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end,
             @ParameterObject Pageable pageable) {
 
-        return ResponseEntity.ok(analyticsService.getMostReportedSymptoms(city, start, end, pageable));
+        long startTime = System.currentTimeMillis();
+        Page<SymptomCountDTO> data = analyticsService.getMostReportedSymptoms(city, start, end, pageable);
+        long duration = System.currentTimeMillis() - startTime;
+        log.info("duration = " + duration);
+
+        return ResponseEntity.ok(data);
     }
 
     /**
@@ -58,7 +65,13 @@ public class AnalyticsController {
             @RequestParam int maxAge,
             @RequestParam String gender,
             @ParameterObject Pageable pageable) {
-        return ResponseEntity.ok(analyticsService.getDiagnosisAnalytics(minAge, maxAge, gender, pageable));
+
+        long startTime = System.currentTimeMillis();
+        Page<DiagnosisAnalyticsDTO> data = analyticsService.getDiagnosisAnalytics(minAge, maxAge, gender, pageable);
+        long duration = System.currentTimeMillis() - startTime;
+
+        log.info("duration = " + duration);
+        return ResponseEntity.ok(data);
     }
 
     /**
@@ -72,6 +85,12 @@ public class AnalyticsController {
     public ResponseEntity<Page<CancellationStatsDTO>> getTopCancelledSpecializations(
             @ParameterObject Pageable pageable
     ) {
-        return ResponseEntity.ok(analyticsService.getTopCancelledSpecializations(pageable));
+
+        long startTime = System.currentTimeMillis();
+        Page<CancellationStatsDTO> data = analyticsService.getTopCancelledSpecializations(pageable);
+        long duration = System.currentTimeMillis() - startTime;
+
+        log.info("duration = " + duration);
+        return ResponseEntity.ok(data);
     }
 }

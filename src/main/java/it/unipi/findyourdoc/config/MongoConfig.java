@@ -3,6 +3,7 @@ package it.unipi.findyourdoc.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
+import org.springframework.data.mongodb.config.EnableMongoAuditing;
 import org.springframework.data.mongodb.core.convert.*;
 import org.springframework.data.mongodb.core.mapping.MongoMappingContext;
 
@@ -12,6 +13,7 @@ import org.springframework.data.mongodb.core.mapping.MongoMappingContext;
  * objects to MongoDB documents and vice versa.
  */
 @Configuration
+@EnableMongoAuditing
 public class MongoConfig {
 
     /**

@@ -3,6 +3,9 @@ package it.unipi.findyourdoc.utils;
 import it.unipi.findyourdoc.dto.mongo.*;
 import it.unipi.findyourdoc.model.mongo.*;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Utility class for object-to-object mapping.
  * Handles the transformation between domain entities and DTOs to maintain layer isolation.
@@ -247,5 +250,16 @@ public class Mapper {
         dto.setDoctorLastName(source.getDoctorLastName());
         dto.setRating(source.getRating());
         return dto;
+    }
+
+    /**
+     * Maps a DoctorProjection to a generic Map for Neo4j bulk operations.
+     */
+    public static Map<String, Object> mapToMap(DoctorProjection doc) {
+        Map<String, Object> entry = new HashMap<>();
+        entry.put("npi", doc.npi());
+        entry.put("avgRating", doc.avgRating());
+        entry.put("ratingCount", doc.ratingCount());
+        return entry;
     }
 }

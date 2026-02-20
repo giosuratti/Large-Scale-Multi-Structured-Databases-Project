@@ -2,16 +2,19 @@ package it.unipi.findyourdoc.dto.mongo;
 
 /**
  * Optimized projection for internal synchronization tasks.
- * Used to efficiently link Appointment documents with their embedded references in Patient arrays.
+ * Links Appointment documents with their embedded references in Patient arrays.
  */
 public record AppointmentSyncProjection(
-        /** * Internal MongoDB ObjectID for precise document mapping. */
+
+        /** Internal MongoDB ObjectID. */
         String id,
 
-        /** * Logical identifier used to locate the specific appointment within the Patient's array. */
+        /** Logical identifier for the specific appointment. */
         String appointmentId,
 
-        /** * Reference to the Patient document owning this appointment. */
-        String patientId
-) {
-}
+        /** Reference to the owning Patient document. */
+        String patientId,
+
+        /** Reference to the assigned Doctor document. */
+        String doctorId
+) {}

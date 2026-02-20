@@ -1,7 +1,6 @@
 package it.unipi.findyourdoc.service.implementation;
 
 import it.unipi.findyourdoc.dto.mongo.*;
-import it.unipi.findyourdoc.dto.neo4j.DoctorGraphUpdateProjection;
 import it.unipi.findyourdoc.model.mongo.*;
 import it.unipi.findyourdoc.model.mongo.enums.AppointmentStatus;
 import it.unipi.findyourdoc.repository.mongo.AdminRepository;
@@ -19,6 +18,8 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.BulkOperations;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Async;
@@ -30,6 +31,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Service implementation for administrative operations.
@@ -45,6 +47,8 @@ public class AdminServiceImplementation implements AdminService {
     private final PatientRepository patientRepository;
     private final DoctorGraphRepository doctorGraphRepository;
     private final AppointmentRepository appointmentRepository;
+
+    private final MongoTemplate mongoTemplate;
 
     /** * Redis template for manual cache key eviction. */
     private final StringRedisTemplate redisTemplate;
@@ -239,33 +243,92 @@ public class AdminServiceImplementation implements AdminService {
         }
     }
 
-    /** * Synchronizes aggregate ratings from MongoDB to Neo4j using parallel batching. */
+    /** * Synchronizes aggregate ratings from MongoDB to Neo4j using batching. */
     @Override
     @CacheEvict(value = {"specialist_search", "doctors_search_city"}, allEntries = true)
     public void syncDoctorRatings() {
         log.info("Starting rating synchronization from MongoDB to Neo4j...");
-        List<DoctorProjection> mongoDoctors = doctorRepository.findAllBy();
+        //List<DoctorProjection> mongoDoctors = doctorRepository.findAllBy();
+        // Questo approccio non carica tutto il DB in RAM
+        // 1. Recuperiamo il totale per calcolare la percentuale
+        long totalDoctors = doctorRepository.count();
+        log.info("Starting sync for {} doctors. Batch size: 500.", totalDoctors);
 
-        List<Map<String, Object>> allUpdates = mongoDoctors.parallelStream()
-                .map(doc -> {
-                    Map<String, Object> entry = new HashMap<>();
-                    entry.put("npi", doc.npi());
-                    entry.put("avgRating", doc.avgRating());
-                    entry.put("ratingCount", doc.ratingCount());
-                    return entry;
-                })
-                .collect(Collectors.toList());
+        try (Stream<DoctorProjection> doctorStream = doctorRepository.streamAllBy()) {
+            List<Map<String, Object>> currentBatch = new ArrayList<>();
+            int processedCount = 0;
+
+            // Usiamo un iteratore o un riferimento esterno per il conteggio
+            Iterable<DoctorProjection> iterable = doctorStream::iterator;
+            for (DoctorProjection doc : iterable) {
+                currentBatch.add(Mapper.mapToMap(doc));
+                processedCount++;
+
+                if (currentBatch.size() == 500) {
+                    doctorGraphRepository.bulkUpdateRatings(currentBatch);
+
+                    // Stampa il progresso a ogni batch completato
+                    double percentage = (processedCount * 100.0) / totalDoctors;
+                    log.info("Progress: {}/{} doctors processed ({})",
+                            processedCount, totalDoctors, String.format("%.2f%%", percentage));
+
+                    currentBatch.clear();
+                }
+            }
+
+            // Ultimo batch (se rimangono elementi < 500)
+            if (!currentBatch.isEmpty()) {
+                doctorGraphRepository.bulkUpdateRatings(currentBatch);
+                log.info("Final batch processed. Total doctors synchronized: {}", processedCount);
+            }
+        } catch (Exception e) {
+            log.error("Sync failed during processing: {}", e.getMessage());
+        }
+
+        log.info("Sync task finished successfully.");
+
+        /*log.info("Preparing updates from MongoDB data...");
+        int totalDoctors = mongoDoctors.size();
+        List<Map<String, Object>> allUpdates = new ArrayList<>(totalDoctors);
+
+        for (int i = 0; i < totalDoctors; i++) {
+            var doc = mongoDoctors.get(i);
+
+            Map<String, Object> entry = Mapper.mapToMap(doc);
+            allUpdates.add(entry);
+
+            // Stampa ogni 1000 elementi per non intasare i log ma avere un feedback
+            if ((i + 1) % 1000 == 0 || (i + 1) == totalDoctors) {
+                log.info("Mapping progress: {}/{} ({}%)",
+                        (i + 1),
+                        totalDoctors,
+                        ((i + 1) * 100) / totalDoctors);
+            }
+        }
+        log.info("Mapping completed. Prepared {} updates.", allUpdates.size());
 
         List<List<Map<String, Object>>> batches = partitionList(allUpdates, 500);
+        int totalBatches = batches.size();
+        log.info("Starting sequential sync: {} batches to process.", totalBatches);
 
-        batches.parallelStream().forEach(batch -> {
+        for (int i = 0; i < totalBatches; i++) {
+            List<Map<String, Object>> batch = batches.get(i);
+            int currentBatchNumber = i + 1;
+
             try {
+                log.info("Processing batch {} of {} ({}%)",
+                        currentBatchNumber,
+                        totalBatches,
+                        (currentBatchNumber * 100) / totalBatches);
+
                 doctorGraphRepository.bulkUpdateRatings(batch);
+
             } catch (Exception e) {
-                log.error("Neo4j batch error: {}", e.getMessage());
+                log.error("Error during batch {}: {}", currentBatchNumber, e.getMessage());
             }
-        });
-        log.info("Sync completed.");
+        }
+
+        log.info("Sync completed successfully.");*/
     }
 
     public static <T> List<List<T>> partitionList(List<T> list, int pageSize) {
@@ -320,118 +383,215 @@ public class AdminServiceImplementation implements AdminService {
     }
 
     /** * Asynchronously synchronizes profile updates across MongoDB and Neo4j. */
+    /**
+     * Asynchronously synchronizes doctor profiles and appointments across MongoDB and Neo4j.
+     * Uses chunking to optimize memory and network I/O.
+     */
     @Override
     @Async
     public void syncAllDoctors() {
-        log.info("Starting massive synchronization...");
-        List<Doctor> allDoctors = doctorRepository.findAll();
+        long totalDbDoctors = doctorRepository.count();
+        log.info("🚀 Starting massive sync. Total doctors in DB: {}. Scanning for active ones...", totalDbDoctors);
 
-        List<DoctorGraphUpdateProjection> neo4jBatch = new ArrayList<>();
+        long startTime = System.currentTimeMillis();
+        int processedCount = 0;
+        List<DoctorBulkUpdateDTO> doctorChunk = new ArrayList<>(500);
 
-        for (Doctor doc : allDoctors) {
-            try {
-                performSingleDoctorSync(doc, neo4jBatch);
-            } catch (Exception e) {
-                log.error("Error syncing doctor {}: {}", doc.getEmail(), e.getMessage());
+        try (Stream<DoctorBulkUpdateDTO> doctorStream = doctorRepository.streamDoctorsForSync()) {
+            for (DoctorBulkUpdateDTO doc : (Iterable<DoctorBulkUpdateDTO>) doctorStream::iterator) {
+                doctorChunk.add(doc);
+                processedCount++;
+
+                // Process in chunks of 500
+                if (doctorChunk.size() == 500) {
+                    processDoctorChunk(doctorChunk);
+                    log.info("⏳ Sync in progress: {} active doctors processed...", processedCount);
+                    doctorChunk.clear();
+                }
             }
-        }
 
-        if (!neo4jBatch.isEmpty()) {
-            List<Map<String, Object>> mapBatch = neo4jBatch.stream()
-                    .map(dto -> {
-                        Map<String, Object> map = new HashMap<>();
-                        map.put("npi", dto.npi());
-                        map.put("telephone", dto.telephone() != null ? dto.telephone() : "");
-                        map.put("city", dto.city() != null ? dto.city() : "");
-                        return map;
-                    })
-                    .collect(Collectors.toList());
+            // Process remaining elements
+            if (!doctorChunk.isEmpty()) {
+                processDoctorChunk(doctorChunk);
+                log.info("⏳ Sync in progress: {} active doctors processed...", processedCount);
+            }
 
-            log.info("Updating Neo4j for {} doctors...", mapBatch.size());
-            doctorGraphRepository.bulkUpdateDoctors(mapBatch);
-            log.info("Neo4j Bulk Update completed.");
+            long durationMs = System.currentTimeMillis() - startTime;
+            log.info("✅ Massive sync completed in {} ms! Processed {} active doctors out of {}.",
+                    durationMs, processedCount, totalDbDoctors);
+
+        } catch (Exception e) {
+            log.error("❌ Critical failure during massive sync: {}", e.getMessage(), e);
         }
     }
 
     /**
-     * Internal logic for syncing a single doctor document.
-     * Manages weekly schedule shifting and denormalized data propagation.
+     * Processes a single chunk of doctors, performing in-memory data shifts and bulk database updates.
+     *
+     * @param chunk List of DoctorBulkUpdateDTO to process.
      */
-    public void performSingleDoctorSync(Doctor doctor, List<DoctorGraphUpdateProjection> neo4jBatch) {
-        boolean dirty = false;
+    private void processDoctorChunk(List<DoctorBulkUpdateDTO> chunk) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime oneWeekFromNow = now.plusDays(7);
 
-        // A. CLEANUP: Remove past appointments from weekly view
-        if (doctor.getBookedThisWeek() != null) {
-            boolean removed = doctor.getBookedThisWeek().removeIf(appt -> appt.getDateTime().isBefore(now));
-            if (removed) dirty = true;
+        // 1. PRE-FETCHING
+
+        // Fetch future appointments
+        Set<String> allFutureApptIds = chunk.stream()
+                .filter(d -> d.getFutureAppointments() != null)
+                .flatMap(d -> d.getFutureAppointments().stream())
+                .collect(Collectors.toSet());
+
+        Map<String, AppointmentFull> appointmentsMap = new HashMap<>();
+        if (!allFutureApptIds.isEmpty()) {
+            appointmentRepository.findAllById(allFutureApptIds)
+                    .forEach(appt -> appointmentsMap.put(appt.getAppointmentId(), appt));
         }
 
-        // B. TIME SHIFT: Move appointments into the 7-day window
-        if (doctor.getFutureAppointments() != null && !doctor.getFutureAppointments().isEmpty()) {
-            List<AppointmentFull> futures = appointmentRepository.findAllById(doctor.getFutureAppointments());
-            List<String> idsMoved = new ArrayList<>();
+        // Fetch future patients for updated doctors
+        Set<String> updatedDoctorIds = chunk.stream()
+                .filter(d -> Boolean.TRUE.equals(d.getUpdated()))
+                .map(DoctorBulkUpdateDTO::getId)
+                .collect(Collectors.toSet());
 
-            for (AppointmentFull appt : futures) {
-                if (appt.getDateTime().isBefore(oneWeekFromNow)) {
-                    AppointmentDoctor embedded = new AppointmentDoctor();
-                    embedded.setAppointmentId(appt.getAppointmentId());
-                    embedded.setPatientFirstName(appt.getPatientFirstName());
-                    embedded.setPatientLastName(appt.getPatientLastName());
-                    embedded.setPatientTelephone(appt.getPatientTelephone());
-                    embedded.setDateTime(appt.getDateTime());
-                    embedded.setStatus(appt.getStatus());
+        Map<String, List<AppointmentSyncProjection>> patientsToUpdateMap = new HashMap<>();
+        if (!updatedDoctorIds.isEmpty()) {
+            appointmentRepository.findFuturePatientIdsByDoctorIdIn(updatedDoctorIds)
+                    .forEach(target -> patientsToUpdateMap
+                            .computeIfAbsent(target.doctorId(), k -> new ArrayList<>())
+                            .add(target)
+                    );
+        }
 
-                    if (doctor.getBookedThisWeek() == null) doctor.setBookedThisWeek(new ArrayList<>());
-                    doctor.getBookedThisWeek().add(embedded);
-                    idsMoved.add(appt.getAppointmentId());
-                    dirty = true;
+        // Setup bulk operations
+        BulkOperations doctorBulkOps = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, Doctor.class);
+        BulkOperations appointmentBulkOps = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, AppointmentFull.class);
+        BulkOperations patientBulkOps = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, Patient.class);
+
+        List<Map<String, Object>> neo4jBatch = new ArrayList<>();
+        List<String> redisKeysToDelete = new ArrayList<>();
+
+        int mongoDoctorUpdatesCount = 0;
+        int extraUpdatesCount = 0;
+
+        // 2. IN-MEMORY PROCESSING
+        for (DoctorBulkUpdateDTO doctor : chunk) {
+            boolean dirty = false;
+
+            // Clean up past or corrupted appointments
+            if (doctor.getBookedThisWeek() != null) {
+                boolean removed = doctor.getBookedThisWeek().removeIf(appt ->
+                        appt == null || appt.getDateTime() == null || appt.getDateTime().isBefore(now)
+                );
+                if (removed) dirty = true;
+            }
+
+            // Shift future appointments to current week
+            if (doctor.getFutureAppointments() != null && !doctor.getFutureAppointments().isEmpty()) {
+                List<String> idsMoved = new ArrayList<>();
+                for (String apptId : doctor.getFutureAppointments()) {
+                    AppointmentFull appt = appointmentsMap.get(apptId);
+                    if (appt != null && appt.getDateTime() != null && appt.getDateTime().isBefore(oneWeekFromNow)) {
+                        AppointmentDoctor embedded = new AppointmentDoctor();
+                        embedded.setAppointmentId(appt.getAppointmentId());
+                        embedded.setPatientFirstName(appt.getPatientFirstName());
+                        embedded.setPatientLastName(appt.getPatientLastName());
+                        embedded.setPatientTelephone(appt.getPatientTelephone());
+                        embedded.setDateTime(appt.getDateTime());
+                        embedded.setStatus(appt.getStatus());
+
+                        if (doctor.getBookedThisWeek() == null) doctor.setBookedThisWeek(new ArrayList<>());
+                        doctor.getBookedThisWeek().add(embedded);
+                        idsMoved.add(apptId);
+                        dirty = true;
+                    }
+                }
+                if (!idsMoved.isEmpty()) {
+                    doctor.getFutureAppointments().removeAll(idsMoved);
                 }
             }
-            if (!idsMoved.isEmpty()) {
-                doctor.getFutureAppointments().removeAll(idsMoved);
+
+            // Propagate profile updates
+            if (Boolean.TRUE.equals(doctor.getUpdated())) {
+                Map<String, Object> neo4jData = new HashMap<>();
+                neo4jData.put("npi", doctor.getNpi());
+                neo4jData.put("telephone", doctor.getTelephone() != null ? doctor.getTelephone() : "");
+                neo4jData.put("city", (doctor.getLocation() != null) ? doctor.getLocation().getCity() : "");
+                neo4jBatch.add(neo4jData);
+
+                // Queue appointment updates
+                org.springframework.data.mongodb.core.query.Update apptUpdate = new org.springframework.data.mongodb.core.query.Update()
+                        .set("location", doctor.getLocation())
+                        .set("doctorTelephone", doctor.getTelephone());
+
+                appointmentBulkOps.updateMulti(
+                        org.springframework.data.mongodb.core.query.Query.query(
+                                org.springframework.data.mongodb.core.query.Criteria.where("doctorId").is(doctor.getId())
+                        ), apptUpdate
+                );
+
+                // Queue patient embedded document updates
+                List<AppointmentSyncProjection> targets = patientsToUpdateMap.getOrDefault(doctor.getId(), new ArrayList<>());
+                for (AppointmentSyncProjection target : targets) {
+                    org.springframework.data.mongodb.core.query.Update patientUpdate = new org.springframework.data.mongodb.core.query.Update()
+                            .set("bookedAppointments.$.location", doctor.getLocation())
+                            .set("bookedAppointments.$.doctorTelephone", doctor.getTelephone());
+
+                    patientBulkOps.updateOne(
+                            org.springframework.data.mongodb.core.query.Query.query(
+                                    org.springframework.data.mongodb.core.query.Criteria.where("_id").is(target.patientId())
+                                            .and("bookedAppointments.appointmentId").is(target.appointmentId())
+                            ), patientUpdate
+                    );
+                }
+
+                extraUpdatesCount++;
+                dirty = true;
+            }
+
+            // 3. PREPARE SAVE OPERATIONS
+            if (dirty) {
+                // Safely sort appointments
+                if (doctor.getBookedThisWeek() != null) {
+                    doctor.getBookedThisWeek().sort(Comparator.comparing(
+                            AppointmentDoctor::getDateTime, Comparator.nullsLast(Comparator.naturalOrder())
+                    ));
+                }
+
+                org.springframework.data.mongodb.core.query.Update partialUpdate = new org.springframework.data.mongodb.core.query.Update()
+                        .set("bookedThisWeek", doctor.getBookedThisWeek())
+                        .set("futureAppointments", doctor.getFutureAppointments())
+                        .set("updated", false);
+
+                doctorBulkOps.updateOne(
+                        org.springframework.data.mongodb.core.query.Query.query(
+                                org.springframework.data.mongodb.core.query.Criteria.where("_id").is(doctor.getId())
+                        ), partialUpdate
+                );
+
+                mongoDoctorUpdatesCount++;
+
+                // Accumulate Redis keys for eviction
+                redisKeysToDelete.add(DOCTOR_SLOTS_CACHE_PREFIX + doctor.getId());
+                if (doctor.getEmail() != null) {
+                    redisKeysToDelete.add("doctor_details::" + doctor.getEmail());
+                }
             }
         }
 
-        // C. INFO UPDATE: Propagate profile changes to embedded structures
-        if (doctor.getUpdated()) {
-            String newPhone = doctor.getTelephone();
-            Location newLocation = doctor.getLocation();
-
-            if (neo4jBatch != null) {
-                neo4jBatch.add(new DoctorGraphUpdateProjection(
-                        doctor.getNpi(),
-                        newPhone,
-                        newLocation.getCity()
-                ));
-            }
-
-            // Bulk update in master collection and patient documents
-            appointmentRepository.updateDoctorInfoBulk(doctor.getId(), newLocation, newPhone);
-
-            List<AppointmentSyncProjection> targets = appointmentRepository.findFuturePatientIdsByDoctorId(doctor.getId());
-            for (AppointmentSyncProjection target : targets) {
-                patientRepository.updateEmbeddedDoctorData(target.patientId(), target.appointmentId(), newLocation, newPhone);
-            }
-
-            doctor.setUpdated(false);
-            dirty = true;
+        // 4. EXECUTE BULK I/O OPERATIONS
+        if (mongoDoctorUpdatesCount > 0) {
+            doctorBulkOps.execute();
         }
-
-        // PERSISTENCE AND CACHE EVICTION
-        if (dirty) {
-            if (doctor.getBookedThisWeek() != null) {
-                doctor.getBookedThisWeek().sort(Comparator.comparing(AppointmentDoctor::getDateTime));
-            }
-            doctorRepository.save(doctor);
-
-            // Purge Redis keys
-            String cacheKey = DOCTOR_SLOTS_CACHE_PREFIX + doctor.getId();
-            redisTemplate.delete(cacheKey);
-
-            Objects.requireNonNull(cacheManager.getCache("doctor_details")).evict(doctor.getEmail());
+        if (extraUpdatesCount > 0) {
+            appointmentBulkOps.execute();
+            patientBulkOps.execute();
+        }
+        if (!neo4jBatch.isEmpty()) {
+            doctorGraphRepository.bulkUpdateDoctors(neo4jBatch);
+        }
+        if (!redisKeysToDelete.isEmpty()) {
+            redisTemplate.delete(redisKeysToDelete);
         }
     }
-
 }

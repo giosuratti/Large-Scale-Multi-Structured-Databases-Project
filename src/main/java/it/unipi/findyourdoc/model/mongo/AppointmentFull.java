@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
@@ -24,6 +25,7 @@ import java.util.ArrayList;
 @NoArgsConstructor
 @AllArgsConstructor
 @Document(collection = "appointments")
+@CompoundIndex(name = "doctor_status_idx", def = "{'doctorId': 1, 'status': 1}")
 public class AppointmentFull extends AppointmentBrief {
 
     /** * Unique identifier for the appointment, mapped to MongoDB's ObjectId. */
