@@ -15,19 +15,4 @@ public interface PatientRepository extends UserRepository<Patient> {
 
     // Common identity validations (like existsByEmail) are inherited from UserRepository.
 
-    /** * Atomically updates doctor details within a specific embedded appointment.
-     * Utilizes the MongoDB positional operator ($) to pinpoint the exact array element.
-     */
-    @Query("{ '_id': ?0, 'bookedAppointments.appointmentId': ?1 }")
-    @Update("{ '$set': { " +
-            "  'bookedAppointments.$.location': ?2, " +     // Updates the nested Location object
-            "  'bookedAppointments.$.doctorTelephone': ?3 " +  // Updates the nested telephone string
-            "} }")
-    void updateEmbeddedDoctorData(
-            String patientId,
-            String appointmentId,
-            Location newLocation,
-            String newPhone
-    );
-
 }

@@ -90,7 +90,7 @@ public class DoctorServiceImplementation implements DoctorService {
         Doctor doctor = doctorRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Doctor not found"));
 
-        List<AppointmentFull> appointments = appointmentRepository.findByDoctorId(doctor.getId());
+        List<AppointmentFull> appointments = appointmentRepository.findAllById(doctor.getFutureAppointments());
         return appointments.stream()
                 .map(Mapper::toAppointmentDTO)
                 .collect(Collectors.toList());

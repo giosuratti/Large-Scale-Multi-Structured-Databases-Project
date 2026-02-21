@@ -169,8 +169,12 @@ public class Mapper {
                     d.getLocation().getZipCode()
             ));
         }
+
+        dto.setBookedThisWeek(d.getBookedThisWeek());
         return dto;
     }
+
+
 
     /**
      * Maps a Doctor domain object to a DTO containing availability slots.

@@ -20,9 +20,6 @@ import java.util.stream.Stream;
 @Repository
 public interface DoctorRepository extends UserRepository<Doctor> {
 
-    /** Retrieves a lightweight projection containing only NPI and rating metrics. */
-    @Query(value = "{}", fields = "{ 'npi': 1, 'avgRating': 1, 'ratingCount': 1, '_id': 0 }", hint = "idx_npi_avgRating_ratingCount")
-    List<DoctorProjection> findAllBy();
 
     /** Streams a lightweight projection for memory-efficient rating synchronization. */
     @Query(value = "{}", fields = "{ 'npi': 1, 'avgRating': 1, 'ratingCount': 1, '_id': 0 }", hint = "idx_npi_avgRating_ratingCount")
@@ -40,12 +37,5 @@ public interface DoctorRepository extends UserRepository<Doctor> {
     /** Retrieves a doctor based on their unique National Provider Identifier (NPI). */
     Optional<Doctor> findByNpi(String npi);
 
-    /** Retrieves a lightweight projection of doctors pending external synchronization. */
-    @Query(value = "{ 'updated': true }", fields = "{ 'npi': 1, 'telephone': 1, 'location': 1, '_id': 0 }")
-    List<DoctorUpdateProjection> findAllPendingSyncs();
 
-    /** Atomically marks a doctor as synchronized by resetting the updated flag. */
-    @Query("{ 'npi': ?0 }")
-    @Update("{ '$set': { 'updated': false } }")
-    void markAsSyncedByNpi(String npi);
 }

@@ -286,49 +286,6 @@ public class AdminServiceImplementation implements AdminService {
         }
 
         log.info("Sync task finished successfully.");
-
-        /*log.info("Preparing updates from MongoDB data...");
-        int totalDoctors = mongoDoctors.size();
-        List<Map<String, Object>> allUpdates = new ArrayList<>(totalDoctors);
-
-        for (int i = 0; i < totalDoctors; i++) {
-            var doc = mongoDoctors.get(i);
-
-            Map<String, Object> entry = Mapper.mapToMap(doc);
-            allUpdates.add(entry);
-
-            // Stampa ogni 1000 elementi per non intasare i log ma avere un feedback
-            if ((i + 1) % 1000 == 0 || (i + 1) == totalDoctors) {
-                log.info("Mapping progress: {}/{} ({}%)",
-                        (i + 1),
-                        totalDoctors,
-                        ((i + 1) * 100) / totalDoctors);
-            }
-        }
-        log.info("Mapping completed. Prepared {} updates.", allUpdates.size());
-
-        List<List<Map<String, Object>>> batches = partitionList(allUpdates, 500);
-        int totalBatches = batches.size();
-        log.info("Starting sequential sync: {} batches to process.", totalBatches);
-
-        for (int i = 0; i < totalBatches; i++) {
-            List<Map<String, Object>> batch = batches.get(i);
-            int currentBatchNumber = i + 1;
-
-            try {
-                log.info("Processing batch {} of {} ({}%)",
-                        currentBatchNumber,
-                        totalBatches,
-                        (currentBatchNumber * 100) / totalBatches);
-
-                doctorGraphRepository.bulkUpdateRatings(batch);
-
-            } catch (Exception e) {
-                log.error("Error during batch {}: {}", currentBatchNumber, e.getMessage());
-            }
-        }
-
-        log.info("Sync completed successfully.");*/
     }
 
     public static <T> List<List<T>> partitionList(List<T> list, int pageSize) {

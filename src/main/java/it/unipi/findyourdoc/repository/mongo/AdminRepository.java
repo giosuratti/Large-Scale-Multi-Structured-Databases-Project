@@ -12,16 +12,6 @@ import java.util.Optional;
  */
 @Repository
 public interface AdminRepository extends UserRepository<Admin>{
-
-    /** * Checks if an administrator exists with the given email.
-     * Utilized by the JwtTokenProvider for credential validation.
-     */
-    boolean existsByEmail(String email);
-
-    /** * Retrieves an administrator based on their unique email address.
-     */
-    Optional<Admin> findByEmail(String email);
-
     /** * Finds a list of administrators whose email starts with a specific prefix.
      * Useful for administrative search or autocomplete features.
      */

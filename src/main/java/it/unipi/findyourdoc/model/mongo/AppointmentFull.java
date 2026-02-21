@@ -25,7 +25,11 @@ import java.util.ArrayList;
 @NoArgsConstructor
 @AllArgsConstructor
 @Document(collection = "appointments")
-@CompoundIndex(name = "doctor_status_idx", def = "{'doctorId': 1, 'status': 1}")
+@CompoundIndex(
+        name = "doctor_scheduled_partial_idx",
+        def = "{'doctorId': 1}",
+        partialFilter = "{'status': 'SCHEDULED'}"
+)
 public class AppointmentFull extends AppointmentBrief {
 
     /** * Unique identifier for the appointment, mapped to MongoDB's ObjectId. */
@@ -38,7 +42,6 @@ public class AppointmentFull extends AppointmentBrief {
 
     /** * Reference to the doctor's record, indexed for faster query performance. */
     @Field(targetType = FieldType.OBJECT_ID)
-    @Indexed
     private String doctorId;
 
     private String patientFirstName;

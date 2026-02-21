@@ -1,10 +1,11 @@
 package it.unipi.findyourdoc.dto.mongo;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import it.unipi.findyourdoc.model.mongo.AppointmentDoctor;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
 
 import java.util.ArrayList;
 
@@ -22,4 +23,8 @@ public class DoctorReadDTO extends DoctorReadDTOBase {
     /** * Collection of all integer feedback scores submitted by patients. */
     @Schema(description = "Historical list of numeric ratings")
     private ArrayList<Integer> ratings;
+
+    /** * Collection of all booked appointments for the week. */
+    @Schema(description = "All the boooked appointments for this week")
+    private ArrayList<AppointmentDoctor> bookedThisWeek;
 }
