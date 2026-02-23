@@ -1,6 +1,7 @@
 package it.unipi.findyourdoc.repository.neo4j;
 
 import it.unipi.findyourdoc.model.neo4j.DiseaseNode;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.neo4j.repository.Neo4jRepository;
 import org.springframework.data.neo4j.repository.query.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,6 +19,8 @@ public interface DiseaseRepository extends Neo4jRepository<DiseaseNode, String> 
      * Identifies the most probable diseases based on an input list of symptoms.
      * Implements a Naive Bayes classification model directly within the graph query.
      */
+
+    @Cacheable(value = "dia", key = "#symptoms")
     @Query("""
     WITH $symptoms AS inputSymptoms
     // 1. Match diseases connected to the provided symptoms

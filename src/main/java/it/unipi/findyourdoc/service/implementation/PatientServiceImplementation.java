@@ -344,10 +344,6 @@ public class PatientServiceImplementation implements PatientService {
      */
     @Override
     @Transactional
-    @Cacheable(
-            value = "dia",
-            key = "T(String).join(',', #createDTO.getSymptoms().stream().sorted().toList())"
-    )
     public SymptomReportBriefDTO createSymptomReportByEmail(String email, SymptomReportCreateDTO createDTO) {
 
         Patient patient = patientRepository.findByEmail(email)
