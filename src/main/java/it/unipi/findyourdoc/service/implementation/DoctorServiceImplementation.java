@@ -189,8 +189,7 @@ public class DoctorServiceImplementation implements DoctorService {
      */
     @Override
     @Caching(evict = {
-            @CacheEvict(value = "doctor_appointments", key = "#email"),
-            @CacheEvict(value = "doctor_ratings", key = "#email")
+            @CacheEvict(value = "doctor_appointments", key = "#email")
     })
     public void invalidateDoctorCache(String email) {
         log.info("Manual cache eviction triggered for email: {}", email);

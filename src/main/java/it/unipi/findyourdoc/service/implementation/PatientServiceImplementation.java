@@ -344,7 +344,10 @@ public class PatientServiceImplementation implements PatientService {
      */
     @Override
     @Transactional
-    @CacheEvict(value = "patient_symptoms", key = "#email")
+    @Cacheable(
+            value = "dia",
+            key = "T(String).join(',', #createDTO.getSymptoms().stream().sorted().toList())"
+    )
     public SymptomReportBriefDTO createSymptomReportByEmail(String email, SymptomReportCreateDTO createDTO) {
 
         Patient patient = patientRepository.findByEmail(email)
@@ -408,7 +411,6 @@ public class PatientServiceImplementation implements PatientService {
      */
     @Override
     @Transactional
-    @CacheEvict(value = "patient_ratings", key = "#patientEmail")
     public RatingDTO addRatingByEmail(String patientEmail, RatingDTO ratingDTO) {
 
         Patient patient = patientRepository.findByEmail(patientEmail)
