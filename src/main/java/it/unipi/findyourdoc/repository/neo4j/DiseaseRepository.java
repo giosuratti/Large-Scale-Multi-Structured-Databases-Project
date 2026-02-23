@@ -20,7 +20,7 @@ public interface DiseaseRepository extends Neo4jRepository<DiseaseNode, String> 
      * Implements a Naive Bayes classification model directly within the graph query.
      */
 
-    @Cacheable(value = "dia", key = "#symptoms")
+    @Cacheable(value = "diagnoses", key = "T(String).join(',', #symptoms)")
     @Query("""
     WITH $symptoms AS inputSymptoms
     // 1. Match diseases connected to the provided symptoms

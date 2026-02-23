@@ -352,7 +352,10 @@ public class PatientServiceImplementation implements PatientService {
         // 1. Neo4j Diagnosis
         ArrayList<String> suggestedDiagnoses = new ArrayList<>();
         if (createDTO.getSymptoms() != null && !createDTO.getSymptoms().isEmpty()) {
-            suggestedDiagnoses = diseaseRepository.findPossibleDiagnoses(createDTO.getSymptoms());
+            List<String> sortedSymptoms = createDTO.getSymptoms().stream()
+                    .sorted()
+                    .toList();
+            suggestedDiagnoses = diseaseRepository.findPossibleDiagnoses(sortedSymptoms);
             log.info("Neo4j suggested diagnoses: {}", suggestedDiagnoses);
         }
 
