@@ -70,7 +70,7 @@ Navigate to the project root directory and run:
 ```bash
 mvn clean install
 mvn spring-boot:run
-
+```
 The backend will be available at http://localhost:8080/swagger-ui/index.html.
 ---
 
